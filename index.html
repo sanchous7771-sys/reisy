@@ -5,98 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Автоматический учёт рейсов ПГС</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
-h1 { color: #333; text-align: center; margin-bottom: 25px; }
-
-/* Верхняя панель */
-.dashboard { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
-.card { background: white; padding: 15px 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); flex: 1 1 200px; min-width: 180px; }
-.card h3 { margin-top: 0; font-size: 16px; color: #555; }
-.card p { font-size: 14px; color: #333; margin: 5px 0 0 0; word-wrap: break-word; }
-.status-card { background: #fffae6; color: #ff9800; font-weight: bold; text-align: center; font-size: 16px; }
-.counter-card { background: #e6f7ff; color: #2196F3; font-weight: bold; text-align: center; font-size: 16px; }
-
-/* Аккордеон */
-.accordion { background-color: #2196F3; color: white; cursor: pointer; padding: 10px 15px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; border-radius: 5px; margin-bottom: 5px; }
-.accordion.active, .accordion:hover { background-color: #1976D2; }
-.panel { padding: 10px 15px; display: none; background-color: #f9f9f9; border-radius: 5px; margin-bottom: 10px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
-.panel input { margin: 5px 0; width: 100%; padding: 6px; border-radius: 3px; border: 1px solid #ccc; }
-
-/* Таблица истории рейсов */
-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; border-radius: 10px; overflow: hidden; }
-th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: center; }
-th { background: #2196F3; color: white; }
-tr:nth-child(even) { background-color: #f2f2f2; }
-
-/* Кнопки */
-button { padding: 10px 15px; margin: 5px 0; border: none; border-radius: 5px; cursor: pointer; }
-.btn { background: #4CAF50; color: white; }
-.btn-red { background: #f44336; color: white; }
-.btn-blue { background: #2196F3; color: white; }
-#notify { padding: 8px; background: #eee; margin-top: 10px; border-radius: 5px; display: none; text-align: center; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+    h1 { color: #333; text-align: center; }
+    .panel { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 20px; }
+    .card { background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 3px 6px rgba(0,0,0,0.1); flex: 1 1 200px; margin: 10px; }
+    .card h3 { margin-top: 0; color: #555; font-size: 16px; }
+    .card p { font-size: 18px; margin: 5px 0; }
+    button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+    .btn { background: #4CAF50; color: white; }
+    .btn-red { background: #f44336; color: white; }
+    .btn-blue { background: #2196F3; color: white; }
+    .settings { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 3px 6px rgba(0,0,0,0.1); }
+    .settings input { margin: 5px; padding: 5px; width: 120px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 3px 6px rgba(0,0,0,0.1); }
+    th, td { padding: 10px; text-align: center; border-bottom: 1px solid #ddd; }
+    th { background: #2196F3; color: white; }
+    #notify { padding: 8px; background: #eee; margin-top: 10px; border-radius: 5px; display: none; text-align: center; }
 </style>
 </head>
 <body>
-
 <h1>Автоматический учёт рейсов ПГС</h1>
 
-<div class="dashboard">
+<div class="panel">
     <div class="card">
         <h3>Зона выгрузки</h3>
-        <p id="zoneCoords">не задано</p>
+        <p id="zoneName">не задано</p>
+        <p id="zoneCoords">-</p>
     </div>
     <div class="card">
         <h3>Экскаватор</h3>
-        <p id="excCoords">не задано</p>
-    </div>
-    <div class="card status-card">
-        <h3>Статус</h3>
-        <p id="status">Ожидание...</p>
+        <p id="excName">не задано</p>
+        <p id="excCoords">-</p>
     </div>
     <div class="card">
         <h3>Текущие координаты</h3>
         <p id="coords">нет данных</p>
     </div>
-    <div class="card counter-card">
+    <div class="card">
+        <h3>Статус</h3>
+        <p id="status">Ожидание...</p>
+    </div>
+    <div class="card">
         <h3>Счётчик рейсов</h3>
         <p id="counter">0</p>
     </div>
 </div>
 
-<button class="accordion">Управление зонами</button>
-<div class="panel">
-    <h4>Зона выгрузки</h4>
-    <input type="text" id="zoneName" placeholder="Название зоны">
-    <input type="number" id="zoneLat" placeholder="Широта">
-    <input type="number" id="zoneLon" placeholder="Долгота">
-    <button class="btn" onclick="saveZone()">Сохранить вручную</button>
-    <button class="btn" onclick="setZoneGPS()">Установить GPS</button>
+<div class="settings">
+    <button onclick="toggleSettings()">⚙ Настройки зон</button>
+    <div id="settingsPanel" style="display:none; margin-top:10px;">
+        <h4>Добавить/Сохранить Зону выгрузки</h4>
+        <input id="zoneNameInput" placeholder="Название">
+        <input id="zoneLatInput" placeholder="Широта">
+        <input id="zoneLonInput" placeholder="Долгота">
+        <button class="btn" onclick="saveZone()">Сохранить</button>
 
-    <h4>Экскаватор</h4>
-    <input type="text" id="excName" placeholder="Название экскаватора">
-    <input type="number" id="excLat" placeholder="Широта">
-    <input type="number" id="excLon" placeholder="Долгота">
-    <button class="btn" onclick="saveExc()">Сохранить вручную</button>
-    <button class="btn" onclick="setExcGPS()">Установить GPS</button>
+        <h4>Добавить/Сохранить Экскаватор</h4>
+        <input id="excNameInput" placeholder="Название">
+        <input id="excLatInput" placeholder="Широта">
+        <input id="excLonInput" placeholder="Долгота">
+        <button class="btn" onclick="saveExc()">Сохранить</button>
+    </div>
 </div>
 
 <div id="notify"></div>
 
-<h3>История рейсов:</h3>
+<h3>История рейсов</h3>
 <table>
     <thead>
-        <tr>
-            <th>№ рейса</th>
-            <th>Начало</th>
-            <th>Конец</th>
-            <th>Время (мин)</th>
-            <th>Расстояние (м)</th>
-        </tr>
+        <tr><th>#</th><th>Начало</th><th>Конец</th><th>Время рейса</th><th>Км</th></tr>
     </thead>
-    <tbody id="tripList"></tbody>
+    <tbody id="tripTable"></tbody>
 </table>
 
-<button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
+<button class="btn-blue" onclick="downloadData()" style="margin-top:10px;">⬇ Выгрузить историю</button>
 
 <script>
 let data = {
@@ -105,79 +87,124 @@ let data = {
     trips: 0,
     tripData: [],
     lastPoint: null,
-    enRoute: false
+    enRoute: false,
+    currentStatus: 'Ожидание...'
 };
 
-function saveData(){localStorage.setItem('pgsData', JSON.stringify(data));}
-function loadData(){const saved = localStorage.getItem('pgsData');if(saved){data=JSON.parse(saved);updateUI();}}
+function saveData(){ localStorage.setItem('pgsData', JSON.stringify(data)); }
+function loadData(){ const saved = localStorage.getItem('pgsData'); if(saved){ data = JSON.parse(saved); updateUI(); } }
 
-function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
+function notify(msg){ const n = document.getElementById('notify'); n.innerText=msg; n.style.display='block'; setTimeout(()=>n.style.display='none',3000); }
+
 function updateUI(){
     document.getElementById('counter').innerText=data.trips;
-    if(data.zone){document.getElementById('zoneCoords').innerText=`${data.zone.name} (${data.zone.lat.toFixed(6)}, ${data.zone.lon.toFixed(6)})`;}
-    if(data.excavator){document.getElementById('excCoords').innerText=`${data.excavator.name} (${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)})`;}
-    renderTripList();
+    if(data.zone){ document.getElementById('zoneName').innerText=data.zone.name; document.getElementById('zoneCoords').innerText=`${data.zone.lat.toFixed(6)}, ${data.zone.lon.toFixed(6)}`; }
+    if(data.excavator){ document.getElementById('excName').innerText=data.excavator.name; document.getElementById('excCoords').innerText=`${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}`; }
+    renderTripTable();
 }
-function renderTripList(){
-    const list=document.getElementById('tripList'); list.innerHTML='';
+
+function renderTripTable(){
+    const tbody = document.getElementById('tripTable'); tbody.innerHTML='';
     data.tripData.forEach((t,i)=>{
+        const timeSec = (new Date(t.endTime)-new Date(t.startTime))/1000;
+        const hours = Math.floor(timeSec/3600);
+        const mins = Math.floor((timeSec%3600)/60);
+        const secs = Math.floor(timeSec%60);
+        const distKm = (t.distance/1000).toFixed(2);
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${i+1}</td><td>${t.startTime}</td><td>${t.endTime}</td><td>${t.duration}</td><td>${t.distance}</td>`;
-        list.appendChild(tr);
+        tr.innerHTML=`<td>${i+1}</td><td>${t.startTime}</td><td>${t.endTime}</td><td>${hours}ч ${mins}м ${secs}с</td><td>${distKm}</td>`;
+        tbody.appendChild(tr);
     });
 }
 
+function toggleSettings(){
+    const p=document.getElementById('settingsPanel');
+    p.style.display=p.style.display==='none'?'block':'none';
+}
+
 function saveZone(){
-    const name=document.getElementById('zoneName').value;
-    const lat=parseFloat(document.getElementById('zoneLat').value);
-    const lon=parseFloat(document.getElementById('zoneLon').value);
-    if(!name||isNaN(lat)||isNaN(lon)){notify("Введите корректные данные для зоны"); return;}
-    data.zone={name,lat,lon}; saveData(); updateUI(); notify("Зона сохранена!");}
+    const n=document.getElementById('zoneNameInput').value;
+    const lat=parseFloat(document.getElementById('zoneLatInput').value);
+    const lon=parseFloat(document.getElementById('zoneLonInput').value);
+    if(n && !isNaN(lat) && !isNaN(lon)){ data.zone={name:n,lat,lon}; updateUI(); saveData(); notify("Зона выгрузки сохранена!"); } 
+    else notify("Введите корректные данные!");
+}
 
 function saveExc(){
-    const name=document.getElementById('excName').value;
-    const lat=parseFloat(document.getElementById('excLat').value);
-    const lon=parseFloat(document.getElementById('excLon').value);
-    if(!name||isNaN(lat)||isNaN(lon)){notify("Введите корректные данные для экскаватора"); return;}
-    data.excavator={name,lat,lon}; saveData(); updateUI(); notify("Экскаватор сохранён!");}
-
-function setZoneGPS(){navigator.geolocation.getCurrentPosition(pos=>{data.zone={name:"Зона",lat:pos.coords.latitude,lon:pos.coords.longitude}; saveData(); updateUI(); notify("Зона установлена по GPS");}, err=>notify("Ошибка GPS для зоны"), {enableHighAccuracy:true});}
-function setExcGPS(){navigator.geolocation.getCurrentPosition(pos=>{data.excavator={name:"Экскаватор",lat:pos.coords.latitude,lon:pos.coords.longitude}; saveData(); updateUI(); notify("Экскаватор установлен по GPS");}, err=>notify("Ошибка GPS для экскаватора"), {enableHighAccuracy:true});}
-
-function getDistance(lat1,lon1,lat2,lon2){const R=6371e3; const φ1=lat1*Math.PI/180; const φ2=lat2*Math.PI/180; const Δφ=(lat2-lat1)*Math.PI/180; const Δλ=(lon2-lon1)*Math.PI/180; const a=Math.sin(Δφ/2)*Math.sin(Δφ/2)+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2); const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); return R*c;}
-function updatePosition(lat,lon){
-    document.getElementById('coords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-    if(!data.zone||!data.excavator){document.getElementById('status').innerText="Не установлены зоны"; return;}
-    const distZone=getDistance(lat,lon,data.zone.lat,data.zone.lon);
-    const distExc=getDistance(lat,lon,data.excavator.lat,data.excavator.lon);
-    let status="В пути";
-    if(distExc<20){status="Загрузка";}
-    else if(distZone<20){status="Выгружаем";}
-    else if(data.lastPoint){
-        if(data.lastPoint.distZone>20 && distZone<=20) status="Выгружаем";
-        else if(data.lastPoint.distExc>20 && distExc<=20) status="Загрузка";
-        else status=(distExc>distZone)?"Едем на загрузку":"В пути";
-    }
-    data.lastPoint={distZone, distExc}; document.getElementById('status').innerText=status;
+    const n=document.getElementById('excNameInput').value;
+    const lat=parseFloat(document.getElementById('excLatInput').value);
+    const lon=parseFloat(document.getElementById('excLonInput').value);
+    if(n && !isNaN(lat) && !isNaN(lon)){ data.excavator={name:n,lat,lon}; updateUI(); saveData(); notify("Экскаватор сохранён!"); } 
+    else notify("Введите корректные данные!");
 }
 
-// имитация координат для теста
-setInterval(()=>{const lat=55.0+Math.random()/100; const lon=37.0+Math.random()/100; updatePosition(lat,lon);},5000);
+function getDistance(lat1, lon1, lat2, lon2){
+    const R=6371e3, φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180, Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
 function downloadData(){
-    const csv=[["№ рейса","Начало","Конец","Время (мин)","Расстояние (м)"]];
-    data.tripData.forEach((t,i)=>{csv.push([i+1,t.startTime,t.endTime,t.duration,t.distance]);});
-    const blob=new Blob([csv.map(e=>e.join(",")).join("\n")],{type:"text/csv"});
+    const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download="trips.csv"; a.click();
+    const a=document.createElement('a'); a.href=url; a.download='trips_data.json'; a.click(); URL.revokeObjectURL(url);
 }
+
+// Отслеживание с фильтрацией и сглаживанием
+let lastPositions=[];
+const MAX_POSITIONS=5, EXC_RADIUS=30, ZONE_RADIUS=30;
+
+function startTracking(){
+    navigator.geolocation.watchPosition(pos=>{
+        const {latitude:lat, longitude:lon, accuracy} = pos.coords;
+        if(accuracy>15) return;
+        lastPositions.push({lat,lon});
+        if(lastPositions.length>MAX_POSITIONS) lastPositions.shift();
+        const avgLat=lastPositions.reduce((s,p)=>s+p.lat,0)/lastPositions.length;
+        const avgLon=lastPositions.reduce((s,p)=>s+p.lon,0)/lastPositions.length;
+        document.getElementById('coords').innerText=`${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`;
+
+        if(!data.zone || !data.excavator){ document.getElementById('status').innerText="Ожидание установки точек..."; return; }
+
+        const distExc=getDistance(avgLat, avgLon, data.excavator.lat, data.excavator.lon);
+        const distZone=getDistance(avgLat, avgLon, data.zone.lat, data.zone.lon);
+
+        let newStatus='';
+        if(distExc<EXC_RADIUS) newStatus="Загрузка";
+        else if(distZone<ZONE_RADIUS) newStatus="Выгружаем";
+        else if(data.enRoute) newStatus="В пути";
+        else newStatus="Едем на загрузку";
+
+        if(newStatus!==data.currentStatus){
+            data.currentStatus=newStatus;
+            document.getElementById('status').innerText=newStatus;
+
+            if(newStatus==="Загрузка" && !data.enRoute){
+                data.enRoute=true;
+                data.lastPoint={lat:avgLat,lon:avgLon,time:new Date().toLocaleString()};
+                notify("Начало рейса!");
+            }
+
+            if(newStatus==="Выгружаем" && data.enRoute){
+                const start = data.lastPoint;
+                const end = {lat:avgLat,lon:avgLon,time:new Date().toLocaleString()};
+                const distance=getDistance(start.lat,start.lon,end.lat,end.lon);
+                data.trips++;
+                data.tripData.push({startCoords:start,endCoords:end,startTime:start.time,endTime:end.time,distance});
+                data.enRoute=false;
+                updateUI();
+                saveData();
+                notify("Рейс завершён!");
+            }
+        }
+    }, err=>{ notify("Ошибка геолокации: "+err.message); }, {enableHighAccuracy:true, maximumAge:0, timeout:5000});
+}
+
 loadData();
-
-// Аккордеон
-const acc=document.getElementsByClassName("accordion")[0];
-acc.addEventListener("click",function(){this.classList.toggle("active"); const panel=this.nextElementSibling; panel.style.display=(panel.style.display==="block")?"none":"block";});
+updateUI();
+startTracking();
 </script>
-
 </body>
 </html>
+
 

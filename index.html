@@ -4,24 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Учёт рейсов ПГС</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
-h1 { color: #333; margin-bottom: 20px; text-align: center; }
-.panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
-.panel div { background: linear-gradient(135deg,#ffffff,#e3f2fd); padding: 15px; border-radius: 12px; flex: 1 1 200px; min-width: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer; }
-.panel div:hover { transform: translateY(-3px); }
-.panel div span { font-weight: bold; display: block; margin-top: 5px; font-size: 1.1em; }
-button { padding: 10px 15px; margin: 5px; border: none; border-radius: 6px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
-button:hover { transform: scale(1.05); box-shadow: 0 3px 8px rgba(0,0,0,0.2); }
-.btn { background: #4CAF50; color: white; }
-.btn-red { background: #f44336; color: white; }
-.btn-blue { background: #2196F3; color: white; }
-.form-group { display: none; margin-top: 10px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-.form-group input, .form-group select { padding: 5px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
-table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-th { background: #2196F3; color: white; }
-#notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
+    h1 { text-align: center; color: #333; margin-bottom: 20px; }
+    .panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
+    .panel div { background: #fff; padding: 15px; border-radius: 12px; flex: 1 1 200px; min-width: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; }
+    .panel div span { display: block; margin-top: 5px; font-weight: bold; }
+    button { padding: 10px 15px; margin: 5px; border: none; border-radius: 6px; cursor: pointer; }
+    .btn { background: #4CAF50; color: white; }
+    .btn-red { background: #f44336; color: white; }
+    .btn-blue { background: #2196F3; color: white; }
+    .form-group { display: none; margin-top: 10px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+    .form-group input, .form-group select { padding: 5px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #2196F3; color: white; }
+    #map { height: 400px; margin-top: 20px; border-radius: 12px; }
+    #notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
 </style>
 </head>
 <body>
@@ -31,7 +31,7 @@ th { background: #2196F3; color: white; }
 <div class="panel">
     <div id="unloadZone">Зона выгрузки: <span>не задано</span></div>
     <div id="excZone">Экскаватор: <span>не задано</span></div>
-    <div id="coords">Текущие координаты: <span>нет данных</span></div>
+    <div id="currentCoords">Текущие координаты: <span>нет данных</span></div>
     <div>Статус: <span id="status">Ожидание...</span></div>
     <div>Счётчик рейсов: <span id="counter">0</span></div>
     <div>Общий километраж: <span id="kmTotal">0</span> км</div>
@@ -47,8 +47,7 @@ th { background: #2196F3; color: white; }
     <select id="savedPointsSelect"></select>
     <button class="btn" onclick="setSelectedZone('unload')">📍 Использовать для зоны выгрузки</button>
     <button class="btn" onclick="setSelectedZone('exc')">📍 Использовать для экскаватора</button>
-    <button class="btn-blue" onclick="editSelectedZone()">✏️ Редактировать</button>
-    <button class="btn-red" onclick="deleteSelectedZone()">🗑️ Удалить</button>
+    <button class="btn-red" onclick="deleteSelectedZone()">❌ Удалить выбранную точку</button>
 </div>
 
 <div id="notify"></div>
@@ -69,7 +68,11 @@ th { background: #2196F3; color: white; }
 <button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
 <button class="btn-red" onclick="resetDay()">🔄 Сбросить дневной счётчик и километраж</button>
 
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
+// ---------- данные ----------
 let data = {
     unloadZone: null,
     excZone: null,
@@ -84,13 +87,17 @@ let data = {
     ]
 };
 
-function saveData(){localStorage.setItem('pgsData', JSON.stringify(data));}
-function loadData(){const s=localStorage.getItem('pgsData'); if(s){data=JSON.parse(s);} updateUI(); updateSavedZonesSelect();}
+// ---------- локальное хранилище ----------
+function saveData(){localStorage.setItem('pgsData',JSON.stringify(data));}
+function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);} updateUI(); updateSavedZonesSelect();}
 
-function notify(msg){const n=document.getElementById('notify'); n.innerText=msg; n.style.display='block'; setTimeout(()=>n.style.display='none',3000);}
+// ---------- уведомления ----------
+function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
 
-function toggleForm(){const f=document.getElementById('zoneForm'); f.style.display=f.style.display==='none'?'block':'none';}
+// ---------- формы ----------
+function toggleForm(){const f=document.getElementById('zoneForm');f.style.display=f.style.display==='none'?'block':'none';}
 
+// ---------- обновление UI ----------
 function updateUI(){
     document.getElementById('counter').innerText=data.trips;
     document.getElementById('kmTotal').innerText=data.kmTotal.toFixed(2);
@@ -100,7 +107,8 @@ function updateUI(){
 }
 
 function renderTripTable(){
-    const tbody=document.getElementById('tripTable'); tbody.innerHTML='';
+    const tbody=document.getElementById('tripTable');
+    tbody.innerHTML='';
     data.tripData.forEach((t,i)=>{
         let dur='—';
         if(t.loadTime && t.unloadTime){
@@ -118,7 +126,7 @@ function renderTripTable(){
     });
 }
 
-// ---------- Зоны ----------
+// ---------- работа с зонами ----------
 function saveZone(){
     const name=document.getElementById('zoneName').value;
     const lat=parseFloat(document.getElementById('zoneLat').value);
@@ -131,7 +139,8 @@ function saveZone(){
 }
 
 function updateSavedZonesSelect(){
-    const sel=document.getElementById('savedPointsSelect'); sel.innerHTML='';
+    const sel=document.getElementById('savedPointsSelect');
+    sel.innerHTML='';
     data.savedZones.forEach((z,i)=>{sel.innerHTML+=`<option value="${i}">${z.name} (${z.lat.toFixed(6)}, ${z.lon.toFixed(6)})</option>`;});
 }
 
@@ -140,48 +149,21 @@ function setSelectedZone(type){
     const z=data.savedZones[sel.value];
     if(type==='unload'){data.unloadZone=z; notify(`Зона выгрузки установлена: ${z.name}`);}
     else{data.excZone=z; notify(`Экскаватор установлен: ${z.name}`);}
-    saveData(); updateUI();
-}
-
-function editSelectedZone(){
-    const sel = document.getElementById('savedPointsSelect'); const idx = sel.value;
-    const z = data.savedZones[idx];
-    const newName = prompt("Новое название:", z.name);
-    const newLat = parseFloat(prompt("Новая широта:", z.lat));
-    const newLon = parseFloat(prompt("Новая долгота:", z.lon));
-    if(newName && !isNaN(newLat) && !isNaN(newLon)){
-        data.savedZones[idx] = {name:newName, lat:newLat, lon:newLon};
-        updateSavedZonesSelect();
-        saveData();
-        notify(`Точка "${newName}" обновлена`);
-    }
+    saveData();
+    updateUI();
 }
 
 function deleteSelectedZone(){
-    const sel = document.getElementById('savedPointsSelect'); const idx = sel.value;
-    if(confirm(`Удалить точку "${data.savedZones[idx].name}"?`)){
-        data.savedZones.splice(idx,1);
+    const sel=document.getElementById('savedPointsSelect');
+    if(sel.value!==null && confirm('Удалить выбранную точку?')){
+        data.savedZones.splice(sel.value,1);
         updateSavedZonesSelect();
         saveData();
         notify('Точка удалена');
     }
 }
 
-// ---------- Клик по текущим координатам ----------
-document.getElementById('coords').addEventListener('click',()=>{
-    const text=document.querySelector('#coords span').innerText;
-    if(!text||text==='нет данных') return;
-    const [lat,lon]=text.split(',').map(Number);
-    const name=prompt('Введите название для этой точки');
-    if(name && !isNaN(lat) && !isNaN(lon)){
-        data.savedZones.push({name,lat,lon});
-        updateSavedZonesSelect();
-        saveData();
-        notify(`Точка "${name}" сохранена`);
-    }
-});
-
-// ---------- Расстояние ----------
+// ---------- расстояние ----------
 function getDistance(lat1,lon1,lat2,lon2){
     const R=6371e3; const φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180;
     const Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
@@ -189,13 +171,13 @@ function getDistance(lat1,lon1,lat2,lon2){
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     return (R*c)/1000;
 }
-const THRESH=0.03;
+const THRESH=0.03; // 30 метров
 
-// ---------- Трекинг ----------
+// ---------- трекинг ----------
 function startTracking(){
     navigator.geolocation.watchPosition(pos=>{
         const lat=pos.coords.latitude, lon=pos.coords.longitude;
-        document.querySelector('#coords span').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        document.getElementById('currentCoords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
         if(!data.unloadZone||!data.excZone){document.getElementById('status').innerText='Ожидание установки зон...'; return;}
 
         const distExc=getDistance(lat,lon,data.excZone.lat,data.excZone.lon);
@@ -205,27 +187,71 @@ function startTracking(){
         if(distExc<THRESH){
             statusElem.innerText='У экскаватора'; statusElem.style.color='green';
             if(!data.enRoute){data.enRoute=true; data.lastPoint={lat,lon,time:Date.now()}; data.tripData.push({loadTime:Date.now(),unloadTime:null,km:0}); saveData();}
-        } else if(distUnload<THRESH){
-            statusElem.innerText='У зоны выгрузки'; statusElem.style.color='blue';
-            if(data.enRoute){data.enRoute=false; const trip=data.tripData[data.tripData.length-1]; if(trip){trip.unloadTime=Date.now(); trip.km=getDistance(trip.loadTime?lat:data.lastPoint.lat,trip.loadTime?lon:data.lastPoint.lon,lat,lon); data.trips++; data.kmTotal+=trip.km; saveData(); updateUI();}}
-        } else {statusElem.innerText='В пути'; statusElem.style.color='orange';}
-    },err=>{document.getElementById('status').innerText='Ошибка геолокации'; console.error(err);}, {enableHighAccuracy:true});
+        }
+        else if(distUnload<THRESH){
+            statusElem.innerText='Выгружаем'; statusElem.style.color='red';
+            if(data.enRoute){
+                const t=data.tripData[data.tripData.length-1];
+                t.unloadTime=Date.now();
+                t.km+=getDistance(lat,lon,data.lastPoint.lat,data.lastPoint.lon);
+                data.kmTotal+=t.km;
+                data.trips++; data.enRoute=false; saveData(); updateUI();
+            }
+        }
+        else if(data.enRoute){statusElem.innerText='В пути на выгрузку'; statusElem.style.color='orange';}
+        else{statusElem.innerText='Едем на загрузку'; statusElem.style.color='blue';}
+
+        data.lastPoint={lat,lon,time:Date.now()};
+    }, err=>{console.error(err); notify('Ошибка получения геопозиции');},{enableHighAccuracy:true, maximumAge:0, timeout:5000});
 }
 
-// ---------- Доп ----------
+// ---------- экспорт данных ----------
 function downloadData(){
-    const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a');
-    a.href=url; a.download='pgs_history.json'; a.click(); URL.revokeObjectURL(url);
+    const csv = ['№ рейса,Время загрузки,Время выгрузки,Длительность,Км'];
+    data.tripData.forEach((t,i)=>{
+        let dur='—';
+        if(t.loadTime && t.unloadTime){
+            const d=(t.unloadTime-t.loadTime)/1000;
+            const h=Math.floor(d/3600), m=Math.floor((d%3600)/60), s=Math.floor(d%60);
+            dur=`${h}ч ${m}м ${s}с`;
+        }
+        csv.push([i+1,
+                  t.loadTime?new Date(t.loadTime).toLocaleTimeString():'—',
+                  t.unloadTime?new Date(t.unloadTime).toLocaleTimeString():'—',
+                  dur,
+                  t.km?t.km.toFixed(2):0].join(','));
+    });
+    const blob = new Blob([csv.join('\n')], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='trip_history.csv'; a.click();
+    URL.revokeObjectURL(url);
 }
 
-function resetDay(){if(confirm('Сбросить дневной счётчик и километраж?')){data.trips=0; data.kmTotal=0; data.tripData=[]; saveData(); updateUI(); notify('Сброшено');}}
+// ---------- сброс ----------
+function resetDay(){if(confirm('Сбросить рейсы и километраж?')){data.trips=0; data.kmTotal=0; data.tripData=[]; saveData(); updateUI(); notify('Данные сброшены');}}
 
-// ---------- Инициализация ----------
+// ---------- карта ----------
+let map = L.map('map').setView([56.081, 93.19], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+let excMarker, unloadMarker;
+function updateMap(){
+    if(data.excZone){
+        if(excMarker) excMarker.setLatLng([data.excZone.lat,data.excZone.lon]);
+        else excMarker=L.marker([data.excZone.lat,data.excZone.lon]).addTo(map).bindPopup('Экскаватор');
+    }
+    if(data.unloadZone){
+        if(unloadMarker) unloadMarker.setLatLng([data.unloadZone.lat,data.unloadZone.lon]);
+        else unloadMarker=L.marker([data.unloadZone.lat,data.unloadZone.lon]).addTo(map).bindPopup('Зона выгрузки');
+    }
+}
+setInterval(updateMap,1000);
+
+// ---------- запуск ----------
 loadData(); startTracking();
 </script>
 </body>
 </html>
+
 
 
 

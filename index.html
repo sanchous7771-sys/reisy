@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Учёт рейсов ПГС</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
     h1 { text-align: center; color: #333; margin-bottom: 20px; }
@@ -20,8 +19,9 @@
     table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
     th { background: #2196F3; color: white; }
-    #map { height: 400px; margin-top: 20px; border-radius: 12px; }
     #notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    #coordsList { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+    #coordsList div { padding: 5px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
 </style>
 </head>
 <body>
@@ -37,17 +37,18 @@
     <div>Общий километраж: <span id="kmTotal">0</span> км</div>
 </div>
 
-<button class="btn" onclick="toggleForm()">Настройка зон</button>
+<button class="btn" onclick="toggleForm()">Менеджер точек</button>
 
 <div class="form-group" id="zoneForm">
+    <h3>Сохранённые точки</h3>
+    <div id="coordsList"></div>
     <input type="text" id="zoneName" placeholder="Название точки">
     <input type="number" id="zoneLat" placeholder="Широта">
     <input type="number" id="zoneLon" placeholder="Долгота">
     <button class="btn" onclick="saveZone()">💾 Сохранить точку</button>
-    <select id="savedPointsSelect"></select>
-    <button class="btn" onclick="setSelectedZone('unload')">📍 Использовать для зоны выгрузки</button>
-    <button class="btn" onclick="setSelectedZone('exc')">📍 Использовать для экскаватора</button>
-    <button class="btn-red" onclick="deleteSelectedZone()">❌ Удалить выбранную точку</button>
+    <button class="btn-blue" onclick="exportZones()">⬇️ Экспорт в JSON</button>
+    <input type="file" id="importFile" style="display:none" onchange="importZones(event)">
+    <button class="btn" onclick="document.getElementById('importFile').click()">⬆️ Импорт JSON</button>
 </div>
 
 <div id="notify"></div>
@@ -68,9 +69,6 @@
 <button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
 <button class="btn-red" onclick="resetDay()">🔄 Сбросить дневной счётчик и километраж</button>
 
-<div id="map"></div>
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
 // ---------- данные ----------
 let data = {
@@ -81,15 +79,12 @@ let data = {
     kmTotal: 0,
     lastPoint: null,
     enRoute: false,
-    savedZones: [
-        {name: "угол возле подъема", lat: 56.081522, lon: 93.201198},
-        {name: "Отвал основной", lat: 56.081019, lon: 93.187775}
-    ]
+    savedZones: []
 };
 
 // ---------- локальное хранилище ----------
 function saveData(){localStorage.setItem('pgsData',JSON.stringify(data));}
-function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);} updateUI(); updateSavedZonesSelect();}
+function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);} updateUI(); updateCoordsList();}
 
 // ---------- уведомления ----------
 function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
@@ -101,8 +96,8 @@ function toggleForm(){const f=document.getElementById('zoneForm');f.style.displa
 function updateUI(){
     document.getElementById('counter').innerText=data.trips;
     document.getElementById('kmTotal').innerText=data.kmTotal.toFixed(2);
-    document.getElementById('unloadZone').querySelector('span').innerText=data.unloadZone?`${data.unloadZone.lat.toFixed(6)}, ${data.unloadZone.lon.toFixed(6)}`:'не задано';
-    document.getElementById('excZone').querySelector('span').innerText=data.excZone?`${data.excZone.lat.toFixed(6)}, ${data.excZone.lon.toFixed(6)}`:'не задано';
+    document.getElementById('unloadZone').querySelector('span').innerText=data.unloadZone?data.unloadZone.name:'не задано';
+    document.getElementById('excZone').querySelector('span').innerText=data.excZone?data.excZone.name:'не задано';
     renderTripTable();
 }
 
@@ -126,41 +121,61 @@ function renderTripTable(){
     });
 }
 
-// ---------- работа с зонами ----------
-function saveZone(){
-    const name=document.getElementById('zoneName').value;
-    const lat=parseFloat(document.getElementById('zoneLat').value);
-    const lon=parseFloat(document.getElementById('zoneLon').value);
+// ---------- работа с точками ----------
+function updateCoordsList(){
+    const list=document.getElementById('coordsList');
+    list.innerHTML='';
+    data.savedZones.forEach((z,i)=>{
+        const div=document.createElement('div');
+        div.innerHTML=`<span>${z.name} (${z.lat.toFixed(6)}, ${z.lon.toFixed(6)})</span>
+        <span>
+        <button class="btn" onclick="setZone(${i},'exc')">Экскаватор</button>
+        <button class="btn" onclick="setZone(${i},'unload')">Зона выгрузки</button>
+        <button class="btn-red" onclick="deleteZone(${i})">❌</button>
+        </span>`;
+        list.appendChild(div);
+    });
+}
+
+function saveZone(name=null, lat=null, lon=null){
+    if(name===null){name=document.getElementById('zoneName').value; lat=parseFloat(document.getElementById('zoneLat').value); lon=parseFloat(document.getElementById('zoneLon').value);}
     if(!name||isNaN(lat)||isNaN(lon)){notify('Введите корректные данные!'); return;}
     data.savedZones.push({name,lat,lon});
-    updateSavedZonesSelect();
+    updateCoordsList();
     saveData();
     notify(`Точка "${name}" сохранена`);
+    document.getElementById('zoneName').value=''; document.getElementById('zoneLat').value=''; document.getElementById('zoneLon').value='';
 }
 
-function updateSavedZonesSelect(){
-    const sel=document.getElementById('savedPointsSelect');
-    sel.innerHTML='';
-    data.savedZones.forEach((z,i)=>{sel.innerHTML+=`<option value="${i}">${z.name} (${z.lat.toFixed(6)}, ${z.lon.toFixed(6)})</option>`;});
+function deleteZone(i){if(confirm('Удалить точку?')){data.savedZones.splice(i,1); updateCoordsList(); saveData(); notify('Точка удалена');}}
+
+function setZone(i,type){
+    const z=data.savedZones[i];
+    if(type==='exc'){data.excZone=z; notify(`Экскаватор установлен: ${z.name}`);}
+    else{data.unloadZone=z; notify(`Зона выгрузки установлена: ${z.name}`);}
+    saveData(); updateUI();
 }
 
-function setSelectedZone(type){
-    const sel=document.getElementById('savedPointsSelect');
-    const z=data.savedZones[sel.value];
-    if(type==='unload'){data.unloadZone=z; notify(`Зона выгрузки установлена: ${z.name}`);}
-    else{data.excZone=z; notify(`Экскаватор установлен: ${z.name}`);}
-    saveData();
-    updateUI();
+// ---------- экспорт/импорт ----------
+function exportZones(){
+    const blob = new Blob([JSON.stringify(data.savedZones,null,2)], {type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='saved_zones.json'; a.click();
+    URL.revokeObjectURL(url);
 }
 
-function deleteSelectedZone(){
-    const sel=document.getElementById('savedPointsSelect');
-    if(sel.value!==null && confirm('Удалить выбранную точку?')){
-        data.savedZones.splice(sel.value,1);
-        updateSavedZonesSelect();
-        saveData();
-        notify('Точка удалена');
-    }
+function importZones(event){
+    const file=event.target.files[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(e){
+        try{
+            const imported=JSON.parse(e.target.result);
+            if(Array.isArray(imported)){data.savedZones=imported; updateCoordsList(); saveData(); notify('Импорт успешно завершён');}
+            else{notify('Неверный формат файла');}
+        }catch(err){notify('Ошибка при чтении файла');}
+    };
+    reader.readAsText(file);
 }
 
 // ---------- расстояние ----------
@@ -171,13 +186,24 @@ function getDistance(lat1,lon1,lat2,lon2){
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     return (R*c)/1000;
 }
-const THRESH=0.03; // 30 метров
+const THRESH=0.03;
 
 // ---------- трекинг ----------
 function startTracking(){
     navigator.geolocation.watchPosition(pos=>{
         const lat=pos.coords.latitude, lon=pos.coords.longitude;
-        document.getElementById('currentCoords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        document.getElementById('currentCoords').querySelector('span').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+
+        document.getElementById('currentCoords').onclick=function(){
+            let name=prompt('Введите название для этой точки:');
+            if(!name) return;
+            const type=prompt('Куда вставить точку? (exc/unload)','exc');
+            if(type!=='exc' && type!=='unload'){notify('Неверный выбор'); return;}
+            saveZone(name,lat,lon);
+            if(type==='exc') data.excZone={name,lat,lon}; else data.unloadZone={name,lat,lon};
+            updateUI(); notify(`Точка "${name}" добавлена и установлена`); saveData();
+        };
+
         if(!data.unloadZone||!data.excZone){document.getElementById('status').innerText='Ожидание установки зон...'; return;}
 
         const distExc=getDistance(lat,lon,data.excZone.lat,data.excZone.lon);
@@ -215,42 +241,24 @@ function downloadData(){
             const h=Math.floor(d/3600), m=Math.floor((d%3600)/60), s=Math.floor(d%60);
             dur=`${h}ч ${m}м ${s}с`;
         }
-        csv.push([i+1,
-                  t.loadTime?new Date(t.loadTime).toLocaleTimeString():'—',
-                  t.unloadTime?new Date(t.unloadTime).toLocaleTimeString():'—',
-                  dur,
-                  t.km?t.km.toFixed(2):0].join(','));
+        csv.push(`${i+1},${t.loadTime?new Date(t.loadTime).toLocaleTimeString():'—'},${t.unloadTime?new Date(t.unloadTime).toLocaleTimeString():'—'},${dur},${t.km?t.km.toFixed(2):0}`);
     });
-    const blob = new Blob([csv.join('\n')], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='trip_history.csv'; a.click();
+    const blob = new Blob([csv.join('\n')], {type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='pgs_history.csv'; a.click();
     URL.revokeObjectURL(url);
 }
 
 // ---------- сброс ----------
-function resetDay(){if(confirm('Сбросить рейсы и километраж?')){data.trips=0; data.kmTotal=0; data.tripData=[]; saveData(); updateUI(); notify('Данные сброшены');}}
+function resetDay(){if(confirm('Сбросить счётчик и километраж?')){data.trips=0; data.kmTotal=0; data.tripData=[]; saveData(); updateUI(); notify('Сброс выполнен');}}
 
-// ---------- карта ----------
-let map = L.map('map').setView([56.081, 93.19], 14);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-let excMarker, unloadMarker;
-function updateMap(){
-    if(data.excZone){
-        if(excMarker) excMarker.setLatLng([data.excZone.lat,data.excZone.lon]);
-        else excMarker=L.marker([data.excZone.lat,data.excZone.lon]).addTo(map).bindPopup('Экскаватор');
-    }
-    if(data.unloadZone){
-        if(unloadMarker) unloadMarker.setLatLng([data.unloadZone.lat,data.unloadZone.lon]);
-        else unloadMarker=L.marker([data.unloadZone.lat,data.unloadZone.lon]).addTo(map).bindPopup('Зона выгрузки');
-    }
-}
-setInterval(updateMap,1000);
-
-// ---------- запуск ----------
-loadData(); startTracking();
+loadData();
+startTracking();
 </script>
+
 </body>
 </html>
+
 
 
 

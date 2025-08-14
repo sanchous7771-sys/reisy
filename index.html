@@ -1,127 +1,129 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Счётчик рейсов</title>
-<meta charset="UTF-8">
-<style>
-body { font-family: Arial; text-align: center; padding: 20px; }
-button { padding: 10px 20px; font-size: 16px; margin: 5px; }
-input { padding: 5px; font-size: 16px; width: 150px; }
-#status { margin-top: 20px; font-size: 18px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учёт рейсов ПГС</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
+        h1 { color: #333; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        #coords { margin-top: 10px; font-size: 14px; color: #555; }
+        .btn { background: #4CAF50; color: white; }
+        .btn-red { background: #f44336; color: white; }
+        .btn-blue { background: #2196F3; color: white; }
+        .btn-orange { background: #FF9800; color: white; }
+    </style>
 </head>
 <body>
-<h1>🚛 Счётчик рейсов</h1>
+    <h1>Учёт рейсов ПГС (тестовая версия)</h1>
 
-<div id="setup">
-  <p>Нажми "Запомнить экскаватор" и "Добавить фабрику", чтобы сохранить координаты.</p>
-  <button onclick="setExcavator()">Запомнить экскаватор</button>
-  <br>
-  <input type="text" id="factoryLat" placeholder="Широта">
-  <input type="text" id="factoryLon" placeholder="Долгота">
-  <button onclick="addFactory()">Добавить фабрику</button>
-</div>
+    <p>Фабрика: <span id="fabCoords">не задано</span></p>
+    <p>Текущие координаты: <span id="coords">нет данных</span></p>
+    <p>Счётчик рейсов: <span id="counter">0</span></p>
 
-<div id="main" style="display:none;">
-  <p>Нажми "Старт", чтобы начать отслеживание рейсов.</p>
-  <button onclick="startTracking()">Старт</button>
-  <button onclick="exportCSV()">Экспорт CSV</button>
-  <div id="status">Ожидание...</div>
-  <div>Всего рейсов: <span id="count">0</span></div>
-</div>
+    <button class="btn" onclick="setFactory()">📍 Установить фабрику</button>
+    <button class="btn" onclick="startTrip()">➕ Начать рейс</button>
+    <button class="btn-red" onclick="resetCounter()">♻️ Сбросить</button>
+    <button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить данные</button>
+    <button class="btn-orange" onclick="resetCoords()">🔄 Сбросить координаты</button>
 
-<script>
-let EXCAVATOR = localStorage.getItem('excavator') ? JSON.parse(localStorage.getItem('excavator')) : null;
-let FACTORIES = localStorage.getItem('factories') ? JSON.parse(localStorage.getItem('factories')) : [];
-let tripActive = false;
-let trips = localStorage.getItem('trips') ? JSON.parse(localStorage.getItem('trips')) : [];
-document.getElementById('count').innerText = trips.length;
+    <script>
+        let factory = null;
+        let trips = 0;
+        let tripData = [];
+        let currentTrip = null;
 
-if (EXCAVATOR && FACTORIES.length > 0) {
-    document.getElementById('setup').style.display = 'none';
-    document.getElementById('main').style.display = 'block';
-}
+        // Обновляем текущие координаты каждые 5 секунд
+        setInterval(getLocation, 5000);
 
-function haversine(coord1, coord2) {
-    const R = 6371000;
-    const toRad = x => x * Math.PI / 180;
-    let [lat1, lon1] = coord1;
-    let [lat2, lon2] = coord2;
-    let dLat = toRad(lat2 - lat1);
-    let dLon = toRad(lon2 - lon1);
-    let a = Math.sin(dLat/2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(a));
-}
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    let lat = pos.coords.latitude.toFixed(6);
+                    let lon = pos.coords.longitude.toFixed(6);
+                    document.getElementById('coords').innerText = `${lat}, ${lon}`;
 
-function setExcavator() {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-            EXCAVATOR = [pos.coords.latitude, pos.coords.longitude];
-            localStorage.setItem('excavator', JSON.stringify(EXCAVATOR));
-            alert("Экскаватор сохранён!");
-            if (FACTORIES.length > 0) {
-                document.getElementById('setup').style.display = 'none';
-                document.getElementById('main').style.display = 'block';
+                    // Если рейс в процессе, обновляем координаты
+                    if (currentTrip) {
+                        currentTrip.endCoords = { lat: lat, lon: lon };
+                    }
+                }, err => {
+                    alert("Не удалось получить местоположение. Разрешите доступ в настройках.");
+                });
             }
-        }, err => { alert("Ошибка геолокации: " + err.message); }, { enableHighAccuracy: true });
-    } else { alert("Геолокация не поддерживается"); }
-}
-
-function addFactory() {
-    let lat = parseFloat(document.getElementById('factoryLat').value);
-    let lon = parseFloat(document.getElementById('factoryLon').value);
-    if (!isNaN(lat) && !isNaN(lon)) {
-        FACTORIES.push([lat, lon]);
-        localStorage.setItem('factories', JSON.stringify(FACTORIES));
-        alert("Фабрика добавлена!");
-        if (EXCAVATOR) {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('main').style.display = 'block';
         }
-    } else {
-        alert("Введите корректные координаты.");
-    }
-}
 
-let watchId = null;
-function startTracking() {
-    document.getElementById('status').innerText = "Отслеживание запущено...";
-    if (navigator.geolocation) {
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        watchId = navigator.geolocation.watchPosition(pos => {
-            let lat = pos.coords.latitude;
-            let lon = pos.coords.longitude;
-            if (!EXCAVATOR || FACTORIES.length === 0) return;
-            let distExc = haversine([lat, lon], EXCAVATOR);
-            let nearFactory = FACTORIES.some(f => haversine([lat, lon], f) < 50);
-            if (!tripActive && distExc < 50) { tripActive = true; document.getElementById('status').innerText = "Рейс начался!"; }
-            if (tripActive && nearFactory) {
-                tripActive = false;
-                trips.push({time: new Date().toISOString()});
-                localStorage.setItem('trips', JSON.stringify(trips));
-                document.getElementById('count').innerText = trips.length;
-                document.getElementById('status').innerText = "Рейс завершён!";
-                setTimeout(() => { document.getElementById('status').innerText = "Ожидание..."; }, 3000);
+        function setFactory() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    factory = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude
+                    };
+                    document.getElementById('fabCoords').innerText = `${factory.lat.toFixed(6)}, ${factory.lon.toFixed(6)}`;
+                    alert("Координаты фабрики сохранены!");
+                });
             }
-        }, err => { document.getElementById('status').innerText = "Ошибка: " + err.message; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-    } else { alert("Геолокация не поддерживается"); }
-}
+        }
 
-function exportCSV() {
-    if (trips.length === 0) { alert("Нет рейсов для экспорта."); return; }
-    let csv = "Время рейса
-" + trips.map(t => t.time).join("
-");
-    let blob = new Blob([csv], {type: "text/csv"});
-    let url = URL.createObjectURL(blob);
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "trips.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
-</script>
+        function startTrip() {
+            if (!currentTrip) {
+                currentTrip = {
+                    startTime: new Date(),
+                    startCoords: {
+                        lat: document.getElementById('coords').innerText.split(',')[0],
+                        lon: document.getElementById('coords').innerText.split(',')[1]
+                    },
+                    endCoords: null
+                };
+                trips++;
+                document.getElementById('counter').innerText = trips;
+                alert("Рейс начат!");
+            } else {
+                alert("Рейс уже в процессе! Сначала завершите его.");
+            }
+        }
+
+        function endTrip() {
+            if (currentTrip) {
+                currentTrip.endTime = new Date();
+                tripData.push(currentTrip);
+                currentTrip = null;
+                alert("Рейс завершён!");
+            } else {
+                alert("Нет активного рейса для завершения.");
+            }
+        }
+
+        function resetCounter() {
+            trips = 0;
+            tripData = [];
+            currentTrip = null;
+            document.getElementById('counter').innerText = trips;
+            alert("Счётчик и данные рейсов сброшены!");
+        }
+
+        function resetCoords() {
+            document.getElementById('coords').innerText = 'нет данных';
+            if (currentTrip) {
+                currentTrip.endCoords = null;
+            }
+            alert("Текущие координаты сброшены!");
+        }
+
+        function downloadData() {
+            const dataStr = JSON.stringify(tripData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'trips_data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        getLocation();
+    </script>
 </body>
 </html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Счётчик рейсов</title>
+<meta charset="UTF-8">
+<style>
+body { font-family: Arial; text-align: center; padding: 20px; }
+button { padding: 10px 20px; font-size: 16px; margin: 5px; }
+input { padding: 5px; font-size: 16px; width: 150px; }
+#status { margin-top: 20px; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>🚛 Счётчик рейсов</h1>
+
+<div id="setup">
+  <p>Нажми "Запомнить экскаватор" и "Добавить фабрику", чтобы сохранить координаты.</p>
+  <button onclick="setExcavator()">Запомнить экскаватор</button>
+  <br>
+  <input type="text" id="factoryLat" placeholder="Широта">
+  <input type="text" id="factoryLon" placeholder="Долгота">
+  <button onclick="addFactory()">Добавить фабрику</button>
+</div>
+
+<div id="main" style="display:none;">
+  <p>Нажми "Старт", чтобы начать отслеживание рейсов.</p>
+  <button onclick="startTracking()">Старт</button>
+  <button onclick="exportCSV()">Экспорт CSV</button>
+  <div id="status">Ожидание...</div>
+  <div>Всего рейсов: <span id="count">0</span></div>
+</div>
+
+<script>
+let EXCAVATOR = localStorage.getItem('excavator') ? JSON.parse(localStorage.getItem('excavator')) : null;
+let FACTORIES = localStorage.getItem('factories') ? JSON.parse(localStorage.getItem('factories')) : [];
+let tripActive = false;
+let trips = localStorage.getItem('trips') ? JSON.parse(localStorage.getItem('trips')) : [];
+document.getElementById('count').innerText = trips.length;
+
+if (EXCAVATOR && FACTORIES.length > 0) {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+}
+
+function haversine(coord1, coord2) {
+    const R = 6371000;
+    const toRad = x => x * Math.PI / 180;
+    let [lat1, lon1] = coord1;
+    let [lat2, lon2] = coord2;
+    let dLat = toRad(lat2 - lat1);
+    let dLon = toRad(lon2 - lon1);
+    let a = Math.sin(dLat/2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function setExcavator() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            EXCAVATOR = [pos.coords.latitude, pos.coords.longitude];
+            localStorage.setItem('excavator', JSON.stringify(EXCAVATOR));
+            alert("Экскаватор сохранён!");
+            if (FACTORIES.length > 0) {
+                document.getElementById('setup').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+            }
+        }, err => { alert("Ошибка геолокации: " + err.message); }, { enableHighAccuracy: true });
+    } else { alert("Геолокация не поддерживается"); }
+}
+
+function addFactory() {
+    let lat = parseFloat(document.getElementById('factoryLat').value);
+    let lon = parseFloat(document.getElementById('factoryLon').value);
+    if (!isNaN(lat) && !isNaN(lon)) {
+        FACTORIES.push([lat, lon]);
+        localStorage.setItem('factories', JSON.stringify(FACTORIES));
+        alert("Фабрика добавлена!");
+        if (EXCAVATOR) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+        }
+    } else {
+        alert("Введите корректные координаты.");
+    }
+}
+
+let watchId = null;
+function startTracking() {
+    document.getElementById('status').innerText = "Отслеживание запущено...";
+    if (navigator.geolocation) {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = navigator.geolocation.watchPosition(pos => {
+            let lat = pos.coords.latitude;
+            let lon = pos.coords.longitude;
+            if (!EXCAVATOR || FACTORIES.length === 0) return;
+            let distExc = haversine([lat, lon], EXCAVATOR);
+            let nearFactory = FACTORIES.some(f => haversine([lat, lon], f) < 50);
+            if (!tripActive && distExc < 50) { tripActive = true; document.getElementById('status').innerText = "Рейс начался!"; }
+            if (tripActive && nearFactory) {
+                tripActive = false;
+                trips.push({time: new Date().toISOString()});
+                localStorage.setItem('trips', JSON.stringify(trips));
+                document.getElementById('count').innerText = trips.length;
+                document.getElementById('status').innerText = "Рейс завершён!";
+                setTimeout(() => { document.getElementById('status').innerText = "Ожидание..."; }, 3000);
+            }
+        }, err => { document.getElementById('status').innerText = "Ошибка: " + err.message; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    } else { alert("Геолокация не поддерживается"); }
+}
+
+function exportCSV() {
+    if (trips.length === 0) { alert("Нет рейсов для экспорта."); return; }
+    let csv = "Время рейса
+" + trips.map(t => t.time).join("
+");
+    let blob = new Blob([csv], {type: "text/csv"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "trips.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+</script>
+</body>
+</html>

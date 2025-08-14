@@ -5,244 +5,196 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Учёт рейсов ПГС</title>
 <style>
-body { font-family: Arial, sans-serif; background: #f4f4f4; margin:0; padding:20px; }
-h1 { color:#333; text-align:center; }
-.panel { background:white; padding:15px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.2); margin-bottom:20px; }
-.panel p { margin:8px 0; font-size:16px; }
-.status { font-weight:bold; font-size:18px; }
-.counter { font-size:18px; }
-button { padding:8px 12px; margin:5px; border:none; border-radius:5px; cursor:pointer; }
-.btn { background:#4CAF50; color:white; }
-.btn-red { background:#f44336; color:white; }
-.btn-blue { background:#2196F3; color:white; }
-.hidden { display:none; }
-#tripList { list-style:none; padding-left:0; }
-#tripList li { background:#fff; margin-bottom:5px; padding:8px; border-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
-.form-group { margin-bottom:10px; }
-input { padding:5px; width:100%; box-sizing:border-box; margin-top:3px; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
+    h1 { color: #333; margin-bottom: 20px; text-align: center; }
+    .panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
+    .panel div { background: linear-gradient(135deg,#ffffff,#e3f2fd); padding: 15px; border-radius: 12px; flex: 1 1 200px; min-width: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s; }
+    .panel div:hover { transform: translateY(-3px); }
+    .panel div span { font-weight: bold; display: block; margin-top: 5px; font-size: 1.1em; }
+    button { padding: 10px 15px; margin: 5px; border: none; border-radius: 6px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+    button:hover { transform: scale(1.05); box-shadow: 0 3px 8px rgba(0,0,0,0.2); }
+    .btn { background: #4CAF50; color: white; }
+    .btn-red { background: #f44336; color: white; }
+    .btn-blue { background: #2196F3; color: white; }
+    .form-group { display: none; margin-top: 10px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+    .form-group input { padding: 5px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #2196F3; color: white; }
+    #notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
 </style>
 </head>
 <body>
 
-<h1>Учёт рейсов ПГС</h1>
+<h1>Автоматический учёт рейсов ПГС</h1>
 
 <div class="panel">
-    <p>Зона выгрузки: <span id="zoneCoords">не задано</span></p>
-    <p>Экскаватор: <span id="excCoords">не задано</span></p>
-    <p>Текущие координаты: <span id="coords">нет данных</span></p>
-    <p>Статус: <span id="status" class="status">Ожидание...</span></p>
-    <p>Счётчик рейсов: <span id="counter" class="counter">0</span></p>
+    <div>Зона выгрузки: <span id="unloadZone">не задано</span></div>
+    <div>Экскаватор: <span id="excZone">не задано</span></div>
+    <div>Текущие координаты: <span id="coords">нет данных</span></div>
+    <div>Статус: <span id="status">Ожидание...</span></div>
+    <div>Счётчик рейсов: <span id="counter">0</span></div>
+    <div>Общий километраж: <span id="kmTotal">0</span> км</div>
 </div>
 
-<button class="btn" onclick="toggleForm()">⚙ Настройки зон</button>
+<button class="btn" onclick="toggleForm()">Настройка зон</button>
 
-<div id="formContainer" class="panel hidden">
-    <div class="form-group">
-        <label>Название зоны выгрузки:</label>
-        <input type="text" id="zoneName">
-        <label>Широта:</label>
-        <input type="number" id="zoneLat" step="0.000001">
-        <label>Долгота:</label>
-        <input type="number" id="zoneLon" step="0.000001">
-        <button class="btn" onclick="saveZone()">💾 Сохранить вручную</button>
-        <button class="btn" onclick="setZone()">📍 Установить текущие координаты</button>
-    </div>
-    <hr>
-    <div class="form-group">
-        <label>Название экскаватора:</label>
-        <input type="text" id="excName">
-        <label>Широта:</label>
-        <input type="number" id="excLat" step="0.000001">
-        <label>Долгота:</label>
-        <input type="number" id="excLon" step="0.000001">
-        <button class="btn" onclick="saveExc()">💾 Сохранить вручную</button>
-        <button class="btn" onclick="setExc()">📍 Установить текущие координаты</button>
-    </div>
+<div class="form-group" id="zoneForm">
+    <input type="text" id="zoneName" placeholder="Название зоны">
+    <input type="number" id="zoneLat" placeholder="Широта">
+    <input type="number" id="zoneLon" placeholder="Долгота">
+    <button class="btn" onclick="saveZone()">💾 Сохранить зону</button>
+    <button class="btn" onclick="setCurrentZone('unload')">📍 Установить зону выгрузки</button>
+    <button class="btn" onclick="setCurrentZone('exc')">📍 Установить экскаватор</button>
 </div>
 
-<div id="notify" class="panel hidden"></div>
+<div id="notify"></div>
 
-<h3>История рейсов:</h3>
-<ul id="tripList"></ul>
+<table>
+    <thead>
+        <tr>
+            <th>№ рейса</th>
+            <th>Время загрузки</th>
+            <th>Время выгрузки</th>
+            <th>Длительность</th>
+            <th>Км</th>
+        </tr>
+    </thead>
+    <tbody id="tripTable"></tbody>
+</table>
+
 <button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
+<button class="btn-red" onclick="resetDay()">🔄 Сбросить дневной счётчик и километраж</button>
 
 <script>
+// ---------- данные ----------
 let data = {
-    zone:null,
-    excavator:null,
-    trips:0,
-    tripData:[],
-    currentTrip:null,
-    currentLat:null,
-    currentLon:null,
-    currentStatus:"Ожидание..."
+    unloadZone: null,
+    excZone: null,
+    trips: 0,
+    tripData: [],
+    kmTotal: 0,
+    lastPoint: null,
+    enRoute: false
 };
 
-const positionHistory = [];
-const MAX_HISTORY = 5;
+// ---------- локальное хранилище ----------
+function saveData(){localStorage.setItem('pgsData',JSON.stringify(data));}
+function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);updateUI();}}
 
-function notify(msg){
-    const n = document.getElementById('notify');
-    n.innerText = msg;
-    n.classList.remove('hidden');
-    setTimeout(()=>n.classList.add('hidden'),3000);
-}
+// ---------- уведомления ----------
+function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
 
-function saveData(){ localStorage.setItem('pgsData', JSON.stringify(data)); }
-function loadData(){ 
-    const saved = localStorage.getItem('pgsData');
-    if(saved){ data=JSON.parse(saved); updateUI(); }
-}
+// ---------- формы ----------
+function toggleForm(){const f=document.getElementById('zoneForm');f.style.display=f.style.display==='none'?'block':'none';}
 
-function toggleForm(){ document.getElementById('formContainer').classList.toggle('hidden'); }
-
+// ---------- обновление UI ----------
 function updateUI(){
-    document.getElementById('counter').innerText = data.trips;
-    document.getElementById('status').innerText = data.currentStatus;
-    document.getElementById('coords').innerText = data.currentLat ? `${data.currentLat.toFixed(6)}, ${data.currentLon.toFixed(6)}` : "нет данных";
-    document.getElementById('zoneCoords').innerText = data.zone ? `${data.zone.lat.toFixed(6)}, ${data.zone.lon.toFixed(6)}` : "не задано";
-    document.getElementById('excCoords').innerText = data.excavator ? `${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}` : "не задано";
-    renderTripList();
+    document.getElementById('counter').innerText=data.trips;
+    document.getElementById('kmTotal').innerText=data.kmTotal.toFixed(2);
+    document.getElementById('unloadZone').innerText=data.unloadZone?`${data.unloadZone.lat.toFixed(6)}, ${data.unloadZone.lon.toFixed(6)}`:'не задано';
+    document.getElementById('excZone').innerText=data.excZone?`${data.excZone.lat.toFixed(6)}, ${data.excZone.lon.toFixed(6)}`:'не задано';
+    renderTripTable();
 }
 
-function setZone(){
-    if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(pos=>{
-            data.zone = { lat: pos.coords.latitude, lon: pos.coords.longitude, name:document.getElementById('zoneName').value || "Зона"};
-            saveData();
-            updateUI();
-            notify("Координаты зоны выгрузки сохранены!");
-        });
-    } else { alert("Геолокация не поддерживается"); }
-}
-
-function saveZone(){
-    const lat=parseFloat(document.getElementById('zoneLat').value);
-    const lon=parseFloat(document.getElementById('zoneLon').value);
-    const name=document.getElementById('zoneName').value || "Зона";
-    if(!isNaN(lat)&&!isNaN(lon)){ data.zone={lat,lon,name}; saveData(); updateUI(); notify("Зона сохранена!"); }
-}
-
-function setExc(){
-    if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(pos=>{
-            data.excavator = { lat: pos.coords.latitude, lon: pos.coords.longitude, name:document.getElementById('excName').value || "Экскаватор"};
-            saveData();
-            updateUI();
-            notify("Координаты экскаватора сохранены!");
-        });
-    } else { alert("Геолокация не поддерживается"); }
-}
-
-function saveExc(){
-    const lat=parseFloat(document.getElementById('excLat').value);
-    const lon=parseFloat(document.getElementById('excLon').value);
-    const name=document.getElementById('excName').value || "Экскаватор";
-    if(!isNaN(lat)&&!isNaN(lon)){ data.excavator={lat,lon,name}; saveData(); updateUI(); notify("Экскаватор сохранён!"); }
-}
-
-function getDistance(lat1, lon1, lat2, lon2){
-    const R=6371e3;
-    const φ1=lat1*Math.PI/180;
-    const φ2=lat2*Math.PI/180;
-    const Δφ=(lat2-lat1)*Math.PI/180;
-    const Δλ=(lon2-lon1)*Math.PI/180;
-    const a=Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-    const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-    return R*c; // в метрах
-}
-
-function startTracking(){
-    if(!navigator.geolocation){ alert("Геолокация не поддерживается"); return; }
-    navigator.geolocation.watchPosition(pos=>{
-        positionHistory.push({lat:pos.coords.latitude, lon:pos.coords.longitude, time:new Date()});
-        if(positionHistory.length>MAX_HISTORY) positionHistory.shift();
-        let sumLat=0, sumLon=0;
-        positionHistory.forEach(p=>{sumLat+=p.lat; sumLon+=p.lon;});
-        data.currentLat = sumLat/positionHistory.length;
-        data.currentLon = sumLon/positionHistory.length;
-        updateStatusAndTrip(data.currentLat, data.currentLon);
-        updateUI();
-    }, err=>{ console.error(err); }, { enableHighAccuracy:true, maximumAge:5000, timeout:10000 });
-}
-
-function updateStatusAndTrip(lat, lon){
-    if(!data.zone || !data.excavator) return;
-    const distToExc = getDistance(lat, lon, data.excavator.lat, data.excavator.lon);
-    const distToZone = getDistance(lat, lon, data.zone.lat, data.zone.lon);
-
-    if(distToExc < 30){
-        if(data.currentStatus !== "Загрузка"){
-            data.currentStatus="Загрузка";
-            startTrip(lat, lon);
-        }
-        if(distToZone<30) endTrip();
-    } else if(distToZone < 30){
-        data.currentStatus="Выгружаем";
-        startTripIfNeeded();
-    } else{
-        if(data.currentStatus==="Загрузка") data.currentStatus="В пути";
-        else if(data.currentStatus==="Выгружаем") data.currentStatus="Едем на загрузку";
-    }
-
-    if(data.currentTrip && data.currentTrip.lastLat!==undefined){
-        const delta=getDistance(lat, lon, data.currentTrip.lastLat, data.currentTrip.lastLon);
-        data.currentTrip.distance += delta;
-    }
-
-    if(data.currentTrip){
-        data.currentTrip.lastLat=lat;
-        data.currentTrip.lastLon=lon;
-    }
-}
-
-function startTrip(lat, lon){
-    if(!data.currentTrip){
-        data.currentTrip={startTime:new Date(), distance:0, lastLat:lat, lastLon:lon};
-    }
-}
-
-function startTripIfNeeded(){
-    if(!data.currentTrip){
-        data.currentTrip={startTime:new Date(), distance:0, lastLat:data.currentLat, lastLon:data.currentLon};
-    }
-}
-
-function endTrip(){
-    if(data.currentTrip){
-        data.currentTrip.endTime=new Date();
-        data.tripData.push({...data.currentTrip});
-        data.trips++;
-        data.currentTrip=null;
-    }
-}
-
-function formatDuration(ms){
-    const totalSec=Math.floor(ms/1000);
-    const h=Math.floor(totalSec/3600);
-    const m=Math.floor((totalSec%3600)/60);
-    const s=totalSec%60;
-    return `${h}ч ${m}м ${s}с`;
-}
-
-function renderTripList(){
-    const list=document.getElementById('tripList');
-    list.innerHTML='';
+function renderTripTable(){
+    const tbody=document.getElementById('tripTable');
+    tbody.innerHTML='';
     data.tripData.forEach((t,i)=>{
-        const li=document.createElement('li');
-        const duration=t.endTime ? formatDuration(new Date(t.endTime)-new Date(t.startTime)) : '-';
-        const distance=t.distance ? (t.distance/1000).toFixed(2)+' км' : "-";
-        li.innerText=`Рейс ${i+1}: ${new Date(t.startTime).toLocaleString()} → ${t.endTime ? new Date(t.endTime).toLocaleString() : "-"} | Время: ${duration} | Дистанция: ${distance}`;
-        list.appendChild(li);
+        let dur='—';
+        if(t.loadTime && t.unloadTime){
+            const d=(t.unloadTime-t.loadTime)/1000;
+            const h=Math.floor(d/3600), m=Math.floor((d%3600)/60), s=Math.floor(d%60);
+            dur=`${h}ч ${m}м ${s}с`;
+        }
+        tbody.innerHTML+=`<tr>
+            <td>${i+1}</td>
+            <td>${t.loadTime?new Date(t.loadTime).toLocaleTimeString():'—'}</td>
+            <td>${t.unloadTime?new Date(t.unloadTime).toLocaleTimeString():'—'}</td>
+            <td>${dur}</td>
+            <td>${t.km?t.km.toFixed(2):0}</td>
+        </tr>`;
     });
 }
 
+// ---------- работа с зонами ----------
+function saveZone(){
+    const name=document.getElementById('zoneName').value;
+    const lat=parseFloat(document.getElementById('zoneLat').value);
+    const lon=parseFloat(document.getElementById('zoneLon').value);
+    if(!name||isNaN(lat)||isNaN(lon)){notify('Введите корректные данные!'); return;}
+    if(name.toLowerCase().includes('выгруз')){data.unloadZone={lat,lon,name};notify('Зона выгрузки сохранена');}
+    else if(name.toLowerCase().includes('экскаватор')){data.excZone={lat,lon,name};notify('Экскаватор сохранён');}
+    saveData();
+    updateUI();
+}
+
+function setCurrentZone(type){
+    navigator.geolocation.getCurrentPosition(pos=>{
+        const z={lat:pos.coords.latitude,lon:pos.coords.longitude};
+        if(type==='unload'){data.unloadZone=z; notify('Зона выгрузки установлена');}
+        else{data.excZone=z; notify('Экскаватор установлен');}
+        saveData();
+        updateUI();
+    },err=>notify('Ошибка GPS'),{enableHighAccuracy:true});
+}
+
+// ---------- расстояние ----------
+function getDistance(lat1,lon1,lat2,lon2){
+    const R=6371e3; const φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180;
+    const Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    return (R*c)/1000;
+}
+const THRESH=0.03; // 30 метров
+
+// ---------- трекинг ----------
+function startTracking(){
+    navigator.geolocation.watchPosition(pos=>{
+        const lat=pos.coords.latitude, lon=pos.coords.longitude;
+        document.getElementById('coords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        if(!data.unloadZone||!data.excZone){document.getElementById('status').innerText='Ожидание установки зон...'; return;}
+
+        const distExc=getDistance(lat,lon,data.excZone.lat,data.excZone.lon);
+        const distUnload=getDistance(lat,lon,data.unloadZone.lat,data.unloadZone.lon);
+        const statusElem=document.getElementById('status');
+
+        if(distExc<THRESH){
+            statusElem.innerText='У экскаватора'; statusElem.style.color='green';
+            if(!data.enRoute){data.enRoute=true; data.lastPoint={lat,lon,time:Date.now()}; data.tripData.push({loadTime:Date.now(),unloadTime:null,km:0}); saveData();}
+        }
+        else if(distUnload<THRESH){
+            statusElem.innerText='Выгружаем'; statusElem.style.color='red';
+            if(data.enRoute){
+                const t=data.tripData[data.tripData.length-1];
+                t.unloadTime=Date.now();
+                t.km+=getDistance(lat,lon,data.lastPoint.lat,data.lastPoint.lon);
+                data.kmTotal+=t.km;
+                data.trips++; data.enRoute=false; saveData(); updateUI();
+            }
+        }
+        else if(data.enRoute){statusElem.innerText='В пути на выгрузку'; statusElem.style.color='orange';}
+        else{statusElem.innerText='Едем на загрузку'; statusElem.style.color='gray';}
+
+    },err=>console.log(err),{enableHighAccuracy:true, maximumAge:1000});
+}
+
+// ---------- сброс ----------
+function resetDay(){
+    if(confirm('Вы точно хотите сбросить счетчик рейсов и километраж за день?')){
+        data.trips=0; data.kmTotal=0;
+        saveData();
+        updateUI();
+        notify('Дневной счётчик и километраж сброшены!');
+    }
+}
+
+// ---------- выгрузка истории ----------
 function downloadData(){
-    const dataStr=JSON.stringify(data.tripData,null,2);
-    const blob=new Blob([dataStr], {type:"application/json"});
+    const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download='trips_data.json'; a.click();
+    const a=document.createElement('a'); a.href=url; a.download='trip_history.json'; a.click();
     URL.revokeObjectURL(url);
 }
 
@@ -252,6 +204,7 @@ startTracking();
 
 </body>
 </html>
+
 
 
 

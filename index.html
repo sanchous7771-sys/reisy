@@ -1,129 +1,74 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Учёт рейсов ПГС</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
-        h1 { color: #333; }
-        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
-        #coords { margin-top: 10px; font-size: 14px; color: #555; }
-        .btn { background: #4CAF50; color: white; }
-        .btn-red { background: #f44336; color: white; }
-        .btn-blue { background: #2196F3; color: white; }
-        .btn-orange { background: #FF9800; color: white; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Автоматический учёт рейсов ПГС</title>
+<style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
+    h1 { color: #333; }
+    button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+    .btn { background: #4CAF50; color: white; }
+    .btn-red { background: #f44336; color: white; }
+    .btn-blue { background: #2196F3; color: white; }
+    #coords { font-size: 14px; color: #555; }
+    #notify { padding: 8px; background: #eee; margin-top: 10px; border-radius: 5px; display: none; }
+    ul { padding-left: 20px; }
+</style>
 </head>
 <body>
-    <h1>Учёт рейсов ПГС (тестовая версия)</h1>
+<h1>Автоматический учёт рейсов ПГС</h1>
 
-    <p>Фабрика: <span id="fabCoords">не задано</span></p>
-    <p>Текущие координаты: <span id="coords">нет данных</span></p>
-    <p>Счётчик рейсов: <span id="counter">0</span></p>
+<p>Фабрика: <span id="fabCoords">не задано</span></p>
+<p>Экскаватор: <span id="excCoords">не задано</span></p>
+<p>Текущие координаты: <span id="coords">нет данных</span></p>
+<p>Статус: <span id="status">Ожидание...</span></p>
+<p>Счётчик рейсов: <span id="counter">0</span></p>
 
-    <button class="btn" onclick="setFactory()">📍 Установить фабрику</button>
-    <button class="btn" onclick="startTrip()">➕ Начать рейс</button>
-    <button class="btn-red" onclick="resetCounter()">♻️ Сбросить</button>
-    <button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить данные</button>
-    <button class="btn-orange" onclick="resetCoords()">🔄 Сбросить координаты</button>
+<button class="btn" onclick="setFactory()">📍 Установить фабрику</button>
+<button class="btn" onclick="setExcavator()">📍 Установить экскаватор</button>
+<button class="btn-red" onclick="resetData()">♻️ Сбросить данные</button>
+<button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
 
-    <script>
-        let factory = null;
-        let trips = 0;
-        let tripData = [];
-        let currentTrip = null;
+<div id="notify"></div>
 
-        // Обновляем текущие координаты каждые 5 секунд
-        setInterval(getLocation, 5000);
+<h3>История рейсов:</h3>
+<ul id="tripList"></ul>
 
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    let lat = pos.coords.latitude.toFixed(6);
-                    let lon = pos.coords.longitude.toFixed(6);
-                    document.getElementById('coords').innerText = `${lat}, ${lon}`;
+<script>
+let data = {
+    factory: null,
+    excavator: null,
+    trips: 0,
+    tripData: [],
+    lastPoint: null,
+    enRoute: false // флаг "в пути"
+};
 
-                    // Если рейс в процессе, обновляем координаты
-                    if (currentTrip) {
-                        currentTrip.endCoords = { lat: lat, lon: lon };
-                    }
-                }, err => {
-                    alert("Не удалось получить местоположение. Разрешите доступ в настройках.");
-                });
-            }
-        }
+function saveData() {
+    localStorage.setItem('pgsData', JSON.stringify(data));
+}
+function loadData() {
+    const saved = localStorage.getItem('pgsData');
+    if (saved) {
+        data = JSON.parse(saved);
+        updateUI();
+    }
+}
 
-        function setFactory() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    factory = {
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude
-                    };
-                    document.getElementById('fabCoords').innerText = `${factory.lat.toFixed(6)}, ${factory.lon.toFixed(6)}`;
-                    alert("Координаты фабрики сохранены!");
-                });
-            }
-        }
+function notify(msg) {
+    const n = document.getElementById('notify');
+    n.innerText = msg;
+    n.style.display = 'block';
+    setTimeout(() => n.style.display = 'none', 3000);
+}
 
-        function startTrip() {
-            if (!currentTrip) {
-                currentTrip = {
-                    startTime: new Date(),
-                    startCoords: {
-                        lat: document.getElementById('coords').innerText.split(',')[0],
-                        lon: document.getElementById('coords').innerText.split(',')[1]
-                    },
-                    endCoords: null
-                };
-                trips++;
-                document.getElementById('counter').innerText = trips;
-                alert("Рейс начат!");
-            } else {
-                alert("Рейс уже в процессе! Сначала завершите его.");
-            }
-        }
-
-        function endTrip() {
-            if (currentTrip) {
-                currentTrip.endTime = new Date();
-                tripData.push(currentTrip);
-                currentTrip = null;
-                alert("Рейс завершён!");
-            } else {
-                alert("Нет активного рейса для завершения.");
-            }
-        }
-
-        function resetCounter() {
-            trips = 0;
-            tripData = [];
-            currentTrip = null;
-            document.getElementById('counter').innerText = trips;
-            alert("Счётчик и данные рейсов сброшены!");
-        }
-
-        function resetCoords() {
-            document.getElementById('coords').innerText = 'нет данных';
-            if (currentTrip) {
-                currentTrip.endCoords = null;
-            }
-            alert("Текущие координаты сброшены!");
-        }
-
-        function downloadData() {
-            const dataStr = JSON.stringify(tripData, null, 2);
-            const blob = new Blob([dataStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'trips_data.json';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        getLocation();
-    </script>
-</body>
-</html>
+function updateUI() {
+    document.getElementById('counter').innerText = data.trips;
+    if (data.factory) {
+        document.getElementById('fabCoords').innerText = `${data.factory.lat.toFixed(6)}, ${data.factory.lon.toFixed(6)}`;
+    }
+    if (data.excavator) {
+        document.getElementById('excCoords').innerText = `${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}`;
+    }
+    renderTripLi

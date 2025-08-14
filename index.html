@@ -42,7 +42,7 @@ let data = {
     trips: 0,
     tripData: [],
     lastPoint: null,
-    enRoute: false // флаг "в пути"
+    enRoute: false
 };
 
 function saveData() {
@@ -71,4 +71,124 @@ function updateUI() {
     if (data.excavator) {
         document.getElementById('excCoords').innerText = `${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}`;
     }
-    renderTripLi
+    renderTripList();
+}
+
+function renderTripList() {
+    const list = document.getElementById('tripList');
+    list.innerHTML = '';
+    data.tripData.forEach((t, i) => {
+        const li = document.createElement('li');
+        li.innerText = `Рейс ${i+1}: ${t.startTime} → ${t.endTime}`;
+        list.appendChild(li);
+    });
+}
+
+function setFactory() {
+    navigator.geolocation.getCurrentPosition(pos => {
+        data.factory = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        updateUI();
+        saveData();
+        notify("Координаты фабрики сохранены!");
+    }, err => {
+        notify("Ошибка получения координат фабрики");
+    }, { enableHighAccuracy: true });
+}
+
+function setExcavator() {
+    navigator.geolocation.getCurrentPosition(pos => {
+        data.excavator = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        updateUI();
+        saveData();
+        notify("Координаты экскаватора сохранены!");
+    }, err => {
+        notify("Ошибка получения координат экскаватора");
+    }, { enableHighAccuracy: true });
+}
+
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2)**2 +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+function resetData() {
+    if (confirm("Сбросить все данные?")) {
+        data = { factory: null, excavator: null, trips: 0, tripData: [], lastPoint: null, enRoute: false };
+        updateUI();
+        saveData();
+        notify("Данные сброшены!");
+    }
+}
+
+function downloadData() {
+    const dataStr = JSON.stringify(data.tripData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'trips_data.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function startTracking() {
+    navigator.geolocation.watchPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        document.getElementById('coords').innerText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+
+        if (!data.factory || !data.excavator) {
+            document.getElementById('status').innerText = "Ожидание установки точек...";
+            return;
+        }
+
+        const distToExcavator = getDistance(lat, lon, data.excavator.lat, data.excavator.lon);
+        const distToFactory = getDistance(lat, lon, data.factory.lat, data.factory.lon);
+
+        if (distToExcavator < 30) {
+            document.getElementById('status').innerText = "У экскаватора";
+            if (!data.enRoute) {
+                data.enRoute = true;
+                data.lastPoint = { lat, lon, time: new Date().toLocaleString() };
+                notify("Начало рейса!");
+            }
+        }
+
+        if (distToFactory < 30 && data.enRoute) {
+            document.getElementById('status').innerText = "На фабрике";
+            data.trips++;
+            data.tripData.push({
+                startTime: data.lastPoint.time,
+                endTime: new Date().toLocaleString()
+            });
+            data.enRoute = false;
+            updateUI();
+            saveData();
+            notify("Рейс завершён!");
+        }
+
+    }, err => {
+        notify("Ошибка геолокации: " + err.message);
+    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 });
+}
+
+// Сначала запрос разрешения
+navigator.geolocation.getCurrentPosition(pos => {
+    notify("Геолокация включена!");
+    startTracking();
+}, err => {
+    notify("Разрешите доступ к геолокации для работы системы");
+}, { enableHighAccuracy: true });
+
+loadData();
+</script>
+</body>
+</html>

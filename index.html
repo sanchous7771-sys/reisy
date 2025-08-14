@@ -1,131 +1,258 @@
-<script>
-const EXC_RADIUS = 20; // радиус экскаватора в метрах
-const ZONE_RADIUS = 20; // радиус зоны выгрузки в метрах
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Учёт рейсов ПГС</title>
+<style>
+body { font-family: Arial, sans-serif; background: #f4f4f4; margin:0; padding:20px; }
+h1 { color:#333; text-align:center; }
+.panel { background:white; padding:15px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.2); margin-bottom:20px; }
+.panel p { margin:8px 0; font-size:16px; }
+.status { font-weight:bold; font-size:18px; }
+.counter { font-size:18px; }
+button { padding:8px 12px; margin:5px; border:none; border-radius:5px; cursor:pointer; }
+.btn { background:#4CAF50; color:white; }
+.btn-red { background:#f44336; color:white; }
+.btn-blue { background:#2196F3; color:white; }
+.hidden { display:none; }
+#tripList { list-style:none; padding-left:0; }
+#tripList li { background:#fff; margin-bottom:5px; padding:8px; border-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+.form-group { margin-bottom:10px; }
+input { padding:5px; width:100%; box-sizing:border-box; margin-top:3px; }
+</style>
+</head>
+<body>
 
+<h1>Учёт рейсов ПГС</h1>
+
+<div class="panel">
+    <p>Зона выгрузки: <span id="zoneCoords">не задано</span></p>
+    <p>Экскаватор: <span id="excCoords">не задано</span></p>
+    <p>Текущие координаты: <span id="coords">нет данных</span></p>
+    <p>Статус: <span id="status" class="status">Ожидание...</span></p>
+    <p>Счётчик рейсов: <span id="counter" class="counter">0</span></p>
+</div>
+
+<button class="btn" onclick="toggleForm()">⚙ Настройки зон</button>
+
+<div id="formContainer" class="panel hidden">
+    <div class="form-group">
+        <label>Название зоны выгрузки:</label>
+        <input type="text" id="zoneName">
+        <label>Широта:</label>
+        <input type="number" id="zoneLat" step="0.000001">
+        <label>Долгота:</label>
+        <input type="number" id="zoneLon" step="0.000001">
+        <button class="btn" onclick="saveZone()">💾 Сохранить вручную</button>
+        <button class="btn" onclick="setZone()">📍 Установить текущие координаты</button>
+    </div>
+    <hr>
+    <div class="form-group">
+        <label>Название экскаватора:</label>
+        <input type="text" id="excName">
+        <label>Широта:</label>
+        <input type="number" id="excLat" step="0.000001">
+        <label>Долгота:</label>
+        <input type="number" id="excLon" step="0.000001">
+        <button class="btn" onclick="saveExc()">💾 Сохранить вручную</button>
+        <button class="btn" onclick="setExc()">📍 Установить текущие координаты</button>
+    </div>
+</div>
+
+<div id="notify" class="panel hidden"></div>
+
+<h3>История рейсов:</h3>
+<ul id="tripList"></ul>
+<button class="btn-blue" onclick="downloadData()">⬇️ Выгрузить историю</button>
+
+<script>
 let data = {
-    zone: null,
-    excavator: null,
-    trips: 0,
-    tripData: [],
-    lastPoint: null,
-    enRoute: false,
-    currentStatus: "Ожидание..."
+    zone:null,
+    excavator:null,
+    trips:0,
+    tripData:[],
+    currentTrip:null,
+    currentLat:null,
+    currentLon:null,
+    currentStatus:"Ожидание..."
 };
 
-function saveData() { localStorage.setItem('pgsData', JSON.stringify(data)); }
-function loadData() {
-    const saved = localStorage.getItem('pgsData');
-    if(saved) data = JSON.parse(saved);
-    updateUI();
-}
+const positionHistory = [];
+const MAX_HISTORY = 5;
 
-function notify(msg) {
+function notify(msg){
     const n = document.getElementById('notify');
     n.innerText = msg;
-    n.style.display='block';
-    setTimeout(()=> n.style.display='none',3000);
+    n.classList.remove('hidden');
+    setTimeout(()=>n.classList.add('hidden'),3000);
 }
 
-function updateUI() {
+function saveData(){ localStorage.setItem('pgsData', JSON.stringify(data)); }
+function loadData(){ 
+    const saved = localStorage.getItem('pgsData');
+    if(saved){ data=JSON.parse(saved); updateUI(); }
+}
+
+function toggleForm(){ document.getElementById('formContainer').classList.toggle('hidden'); }
+
+function updateUI(){
     document.getElementById('counter').innerText = data.trips;
     document.getElementById('status').innerText = data.currentStatus;
-    document.getElementById('coords').innerText = "нет данных";
-    document.getElementById('zoneCoords').innerText = data.zone ? `${data.zone.lat.toFixed(6)}, ${data.zone.lon.toFixed(6)}` : 'не задано';
-    document.getElementById('excCoords').innerText = data.excavator ? `${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}` : 'не задано';
-    renderTripTable();
+    document.getElementById('coords').innerText = data.currentLat ? `${data.currentLat.toFixed(6)}, ${data.currentLon.toFixed(6)}` : "нет данных";
+    document.getElementById('zoneCoords').innerText = data.zone ? `${data.zone.lat.toFixed(6)}, ${data.zone.lon.toFixed(6)}` : "не задано";
+    document.getElementById('excCoords').innerText = data.excavator ? `${data.excavator.lat.toFixed(6)}, ${data.excavator.lon.toFixed(6)}` : "не задано";
+    renderTripList();
 }
 
-function renderTripTable() {
-    const table = document.getElementById('tripTableBody');
-    table.innerHTML='';
-    data.tripData.forEach((t,i)=>{
-        const start = new Date(t.startTime);
-        const end = new Date(t.endTime);
-        const diffSec = (end-start)/1000;
-        const h = Math.floor(diffSec/3600);
-        const m = Math.floor((diffSec%3600)/60);
-        const s = Math.floor(diffSec%60);
-        const row = `<tr>
-            <td>${i+1}</td>
-            <td>${start.toLocaleString()}</td>
-            <td>${end.toLocaleString()}</td>
-            <td>${h} ч ${m} м ${s} с</td>
-            <td>${t.distance.toFixed(2)} м</td>
-        </tr>`;
-        table.innerHTML += row;
-    });
+function setZone(){
+    if(navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(pos=>{
+            data.zone = { lat: pos.coords.latitude, lon: pos.coords.longitude, name:document.getElementById('zoneName').value || "Зона"};
+            saveData();
+            updateUI();
+            notify("Координаты зоны выгрузки сохранены!");
+        });
+    } else { alert("Геолокация не поддерживается"); }
 }
 
-function setZone() {
-    navigator.geolocation.getCurrentPosition(pos=>{
-        data.zone={lat: pos.coords.latitude, lon: pos.coords.longitude};
-        updateUI(); saveData(); notify("Зона выгрузки сохранена!");
-    }, err=>notify("Ошибка получения координат зоны"), {enableHighAccuracy:true});
+function saveZone(){
+    const lat=parseFloat(document.getElementById('zoneLat').value);
+    const lon=parseFloat(document.getElementById('zoneLon').value);
+    const name=document.getElementById('zoneName').value || "Зона";
+    if(!isNaN(lat)&&!isNaN(lon)){ data.zone={lat,lon,name}; saveData(); updateUI(); notify("Зона сохранена!"); }
 }
 
-function setExcavator() {
-    navigator.geolocation.getCurrentPosition(pos=>{
-        data.excavator={lat: pos.coords.latitude, lon: pos.coords.longitude};
-        updateUI(); saveData(); notify("Экскаватор сохранён!");
-    }, err=>notify("Ошибка получения координат экскаватора"), {enableHighAccuracy:true});
+function setExc(){
+    if(navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(pos=>{
+            data.excavator = { lat: pos.coords.latitude, lon: pos.coords.longitude, name:document.getElementById('excName').value || "Экскаватор"};
+            saveData();
+            updateUI();
+            notify("Координаты экскаватора сохранены!");
+        });
+    } else { alert("Геолокация не поддерживается"); }
 }
 
-function getDistance(lat1,lon1,lat2,lon2){
-    const R=6371000;
+function saveExc(){
+    const lat=parseFloat(document.getElementById('excLat').value);
+    const lon=parseFloat(document.getElementById('excLon').value);
+    const name=document.getElementById('excName').value || "Экскаватор";
+    if(!isNaN(lat)&&!isNaN(lon)){ data.excavator={lat,lon,name}; saveData(); updateUI(); notify("Экскаватор сохранён!"); }
+}
+
+function getDistance(lat1, lon1, lat2, lon2){
+    const R=6371e3;
     const φ1=lat1*Math.PI/180;
     const φ2=lat2*Math.PI/180;
     const Δφ=(lat2-lat1)*Math.PI/180;
     const Δλ=(lon2-lon1)*Math.PI/180;
     const a=Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-    return R*c;
+    return R*c; // в метрах
 }
 
-function startTracking() {
+function startTracking(){
+    if(!navigator.geolocation){ alert("Геолокация не поддерживается"); return; }
     navigator.geolocation.watchPosition(pos=>{
-        const lat=pos.coords.latitude;
-        const lon=pos.coords.longitude;
-        document.getElementById('coords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        positionHistory.push({lat:pos.coords.latitude, lon:pos.coords.longitude, time:new Date()});
+        if(positionHistory.length>MAX_HISTORY) positionHistory.shift();
+        let sumLat=0, sumLon=0;
+        positionHistory.forEach(p=>{sumLat+=p.lat; sumLon+=p.lon;});
+        data.currentLat = sumLat/positionHistory.length;
+        data.currentLon = sumLon/positionHistory.length;
+        updateStatusAndTrip(data.currentLat, data.currentLon);
+        updateUI();
+    }, err=>{ console.error(err); }, { enableHighAccuracy:true, maximumAge:5000, timeout:10000 });
+}
 
-        if(!data.zone || !data.excavator) { data.currentStatus="Ожидание установки точек..."; document.getElementById('status').innerText=data.currentStatus; return; }
+function updateStatusAndTrip(lat, lon){
+    if(!data.zone || !data.excavator) return;
+    const distToExc = getDistance(lat, lon, data.excavator.lat, data.excavator.lon);
+    const distToZone = getDistance(lat, lon, data.zone.lat, data.zone.lon);
 
-        const distExc=getDistance(lat,lon,data.excavator.lat,data.excavator.lon);
-        const distZone=getDistance(lat,lon,data.zone.lat,data.zone.lon);
-        let newStatus='';
-
-        if(distExc<EXC_RADIUS) newStatus="Загрузка";
-        else if(distZone<ZONE_RADIUS) newStatus="Выгружаем";
-        else if(data.enRoute) newStatus="В пути";
-        else newStatus="Едем на загрузку";
-
-        if(newStatus!==data.currentStatus){
-            data.currentStatus=newStatus;
-            document.getElementById('status').innerText=newStatus;
-
-            if(newStatus==="Загрузка" && !data.enRoute){
-                data.enRoute=true;
-                data.lastPoint={lat,lon,time:new Date().toISOString()};
-                notify("Начало рейса!");
-            }
-
-            if(newStatus==="Выгружаем" && data.enRoute){
-                const start = data.lastPoint;
-                const end = {lat,lon,time:new Date().toISOString()};
-                const distance = getDistance(start.lat,start.lon,end.lat,end.lon);
-                data.trips++;
-                data.tripData.push({startCoords:start,endCoords:end,startTime:start.time,endTime:end.time,distance});
-                data.enRoute=false;
-                updateUI(); saveData(); notify("Рейс завершён!");
-            }
+    if(distToExc < 30){
+        if(data.currentStatus !== "Загрузка"){
+            data.currentStatus="Загрузка";
+            startTrip(lat, lon);
         }
+        if(distToZone<30) endTrip();
+    } else if(distToZone < 30){
+        data.currentStatus="Выгружаем";
+        startTripIfNeeded();
+    } else{
+        if(data.currentStatus==="Загрузка") data.currentStatus="В пути";
+        else if(data.currentStatus==="Выгружаем") data.currentStatus="Едем на загрузку";
+    }
 
-    }, err=>notify("Ошибка геолокации: "+err.message), {enableHighAccuracy:true, maximumAge:0, timeout:5000});
+    if(data.currentTrip && data.currentTrip.lastLat!==undefined){
+        const delta=getDistance(lat, lon, data.currentTrip.lastLat, data.currentTrip.lastLon);
+        data.currentTrip.distance += delta;
+    }
+
+    if(data.currentTrip){
+        data.currentTrip.lastLat=lat;
+        data.currentTrip.lastLon=lon;
+    }
+}
+
+function startTrip(lat, lon){
+    if(!data.currentTrip){
+        data.currentTrip={startTime:new Date(), distance:0, lastLat:lat, lastLon:lon};
+    }
+}
+
+function startTripIfNeeded(){
+    if(!data.currentTrip){
+        data.currentTrip={startTime:new Date(), distance:0, lastLat:data.currentLat, lastLon:data.currentLon};
+    }
+}
+
+function endTrip(){
+    if(data.currentTrip){
+        data.currentTrip.endTime=new Date();
+        data.tripData.push({...data.currentTrip});
+        data.trips++;
+        data.currentTrip=null;
+    }
+}
+
+function formatDuration(ms){
+    const totalSec=Math.floor(ms/1000);
+    const h=Math.floor(totalSec/3600);
+    const m=Math.floor((totalSec%3600)/60);
+    const s=totalSec%60;
+    return `${h}ч ${m}м ${s}с`;
+}
+
+function renderTripList(){
+    const list=document.getElementById('tripList');
+    list.innerHTML='';
+    data.tripData.forEach((t,i)=>{
+        const li=document.createElement('li');
+        const duration=t.endTime ? formatDuration(new Date(t.endTime)-new Date(t.startTime)) : '-';
+        const distance=t.distance ? (t.distance/1000).toFixed(2)+' км' : "-";
+        li.innerText=`Рейс ${i+1}: ${new Date(t.startTime).toLocaleString()} → ${t.endTime ? new Date(t.endTime).toLocaleString() : "-"} | Время: ${duration} | Дистанция: ${distance}`;
+        list.appendChild(li);
+    });
+}
+
+function downloadData(){
+    const dataStr=JSON.stringify(data.tripData,null,2);
+    const blob=new Blob([dataStr], {type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='trips_data.json'; a.click();
+    URL.revokeObjectURL(url);
 }
 
 loadData();
-updateUI();
 startTracking();
 </script>
+
+</body>
+</html>
+
 
 
 

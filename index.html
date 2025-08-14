@@ -5,21 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Учёт рейсов ПГС</title>
 <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
-    h1 { text-align: center; color: #333; margin-bottom: 20px; }
-    .panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
-    .panel div { background: #fff; padding: 15px; border-radius: 12px; flex: 1 1 200px; min-width: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; }
-    .panel div span { display: block; margin-top: 5px; font-weight: bold; }
-    button { padding: 10px 15px; margin: 5px; border: none; border-radius: 6px; cursor: pointer; }
-    .btn { background: #4CAF50; color: white; }
-    .btn-red { background: #f44336; color: white; }
-    .btn-blue { background: #2196F3; color: white; }
-    .form-group { display: none; margin-top: 10px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-    .form-group input, .form-group select { padding: 5px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
-    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-    th { background: #2196F3; color: white; }
-    #notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
+h1 { text-align: center; color: #333; margin-bottom: 20px; }
+.panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
+.panel div { background: #fff; padding: 15px; border-radius: 12px; flex: 1 1 200px; min-width: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; }
+.panel div span { display: block; margin-top: 5px; font-weight: bold; }
+button { padding: 8px 12px; margin: 3px; border: none; border-radius: 6px; cursor: pointer; }
+.btn { background: #4CAF50; color: white; }
+.btn-red { background: #f44336; color: white; }
+.btn-blue { background: #2196F3; color: white; }
+.btn-orange { background: #FF9800; color: white; }
+.form-group { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+.form-group h2 { margin-top: 0; color: #333; }
+.form-group input { padding: 5px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; width: 150px; }
+.point-list { margin-top: 10px; }
+.point-item { display: flex; align-items: center; justify-content: space-between; background: #f9f9f9; padding: 8px; border-radius: 8px; margin-bottom: 5px; }
+.point-item span { margin-right: 10px; font-weight: bold; }
+.point-item button { padding: 4px 8px; }
+#notify { padding: 8px; margin-top: 10px; border-radius: 5px; display: none; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+th { background: #2196F3; color: white; }
 </style>
 </head>
 <body>
@@ -35,17 +41,15 @@
     <div>Общий километраж: <span id="kmTotal">0</span> км</div>
 </div>
 
-<button class="btn" onclick="toggleForm()">Настройка зон</button>
-
 <div class="form-group" id="zoneForm">
-    <input type="text" id="zoneName" placeholder="Название точки">
-    <input type="number" id="zoneLat" placeholder="Широта">
-    <input type="number" id="zoneLon" placeholder="Долгота">
-    <button class="btn" onclick="saveZoneFromForm()">💾 Сохранить точку</button>
-    <select id="savedPointsSelect"></select>
-    <button class="btn" onclick="setSelectedZone('unload')">📍 Использовать для зоны выгрузки</button>
-    <button class="btn" onclick="setSelectedZone('exc')">📍 Использовать для экскаватора</button>
-    <button class="btn-red" onclick="deleteSelectedZone()">❌ Удалить выбранную точку</button>
+    <h2>Управление точками</h2>
+    <div>
+        <input type="text" id="zoneName" placeholder="Название точки">
+        <input type="number" id="zoneLat" placeholder="Широта">
+        <input type="number" id="zoneLon" placeholder="Долгота">
+        <button class="btn" onclick="addOrUpdatePoint()">💾 Добавить / Обновить</button>
+    </div>
+    <div class="point-list" id="pointList"></div>
 </div>
 
 <div id="notify"></div>
@@ -67,7 +71,6 @@
 <button class="btn-red" onclick="resetDay()">🔄 Сбросить дневной счётчик и километраж</button>
 
 <script>
-// ---------- данные ----------
 let data = {
     unloadZone: null,
     excZone: null,
@@ -82,22 +85,18 @@ let data = {
     ]
 };
 
-// ---------- локальное хранилище ----------
 function saveData(){localStorage.setItem('pgsData',JSON.stringify(data));}
-function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);} updateUI(); updateSavedZonesSelect();}
+function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);} updateUI(); renderPointList();}
 
 // ---------- уведомления ----------
 function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
 
-// ---------- формы ----------
-function toggleForm(){const f=document.getElementById('zoneForm');f.style.display=f.style.display==='none'?'block':'none';}
-
-// ---------- обновление UI ----------
+// ---------- UI ----------
 function updateUI(){
     document.getElementById('counter').innerText=data.trips;
     document.getElementById('kmTotal').innerText=data.kmTotal.toFixed(2);
-    document.getElementById('unloadZone').querySelector('span').innerText=data.unloadZone?`${data.unloadZone.lat.toFixed(6)}, ${data.unloadZone.lon.toFixed(6)}`:'не задано';
-    document.getElementById('excZone').querySelector('span').innerText=data.excZone?`${data.excZone.lat.toFixed(6)}, ${data.excZone.lon.toFixed(6)}`:'не задано';
+    document.getElementById('unloadZone').querySelector('span').innerText=data.unloadZone?`${data.unloadZone.name} (${data.unloadZone.lat.toFixed(6)}, ${data.unloadZone.lon.toFixed(6)})`:'не задано';
+    document.getElementById('excZone').querySelector('span').innerText=data.excZone?`${data.excZone.name} (${data.excZone.lat.toFixed(6)}, ${data.excZone.lon.toFixed(6)})`:'не задано';
     renderTripTable();
 }
 
@@ -121,43 +120,57 @@ function renderTripTable(){
     });
 }
 
-// ---------- работа с зонами ----------
-function saveZoneFromForm(){
-    const name=document.getElementById('zoneName').value;
+// ---------- работа с точками ----------
+function addOrUpdatePoint(){
+    const name=document.getElementById('zoneName').value.trim();
     const lat=parseFloat(document.getElementById('zoneLat').value);
     const lon=parseFloat(document.getElementById('zoneLon').value);
-    if(!name||isNaN(lat)||isNaN(lon)){notify('Введите корректные данные!'); return;}
-    data.savedZones.push({name,lat,lon});
-    updateSavedZonesSelect();
+    if(!name||isNaN(lat)||isNaN(lon)){notify('Введите корректные данные'); return;}
+    
+    const existing=data.savedZones.find(z=>z.name===name);
+    if(existing){existing.lat=lat; existing.lon=lon; notify(`Точка "${name}" обновлена`);}
+    else {data.savedZones.push({name,lat,lon}); notify(`Точка "${name}" добавлена`);}
+    
+    renderPointList();
     saveData();
-    notify(`Точка "${name}" сохранена`);
 }
 
-function saveZone(name, lat, lon){
-    data.savedZones.push({name, lat, lon});
-    updateSavedZonesSelect();
+function renderPointList(){
+    const container=document.getElementById('pointList');
+    container.innerHTML='';
+    data.savedZones.forEach((z,i)=>{
+        const div=document.createElement('div');
+        div.className='point-item';
+        div.innerHTML=`<span>${z.name} (${z.lat.toFixed(6)}, ${z.lon.toFixed(6)})</span>
+            <div>
+                <button class="btn-blue" onclick="setZone(${i},'exc')">Экскаватор</button>
+                <button class="btn-orange" onclick="setZone(${i},'unload')">Выгрузка</button>
+                <button class="btn" onclick="editPoint(${i})">✏️</button>
+                <button class="btn-red" onclick="deletePoint(${i})">❌</button>
+            </div>`;
+        container.appendChild(div);
+    });
 }
 
-function updateSavedZonesSelect(){
-    const sel=document.getElementById('savedPointsSelect');
-    sel.innerHTML='';
-    data.savedZones.forEach((z,i)=>{sel.innerHTML+=`<option value="${i}">${z.name} (${z.lat.toFixed(6)}, ${z.lon.toFixed(6)})</option>`;});
-}
-
-function setSelectedZone(type){
-    const sel=document.getElementById('savedPointsSelect');
-    const z=data.savedZones[sel.value];
-    if(type==='unload'){data.unloadZone=z; notify(`Зона выгрузки установлена: ${z.name}`);}
-    else{data.excZone=z; notify(`Экскаватор установлен: ${z.name}`);}
-    saveData();
+function setZone(index,type){
+    const z=data.savedZones[index];
+    if(type==='exc'){data.excZone=z; notify(`Экскаватор установлен: ${z.name}`);}
+    else{data.unloadZone=z; notify(`Зона выгрузки установлена: ${z.name}`);}
     updateUI();
+    saveData();
 }
 
-function deleteSelectedZone(){
-    const sel=document.getElementById('savedPointsSelect');
-    if(sel.value!==null && confirm('Удалить выбранную точку?')){
-        data.savedZones.splice(sel.value,1);
-        updateSavedZonesSelect();
+function editPoint(index){
+    const z=data.savedZones[index];
+    document.getElementById('zoneName').value=z.name;
+    document.getElementById('zoneLat').value=z.lat;
+    document.getElementById('zoneLon').value=z.lon;
+}
+
+function deletePoint(index){
+    if(confirm('Удалить выбранную точку?')){
+        data.savedZones.splice(index,1);
+        renderPointList();
         saveData();
         notify('Точка удалена');
     }
@@ -171,7 +184,7 @@ function getDistance(lat1,lon1,lat2,lon2){
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     return (R*c)/1000;
 }
-const THRESH=0.03; // 30 метров
+const THRESH=0.03;
 
 // ---------- трекинг ----------
 function startTracking(){
@@ -210,7 +223,7 @@ function startTracking(){
 
     // Клик для сохранения текущих координат
     document.getElementById('currentCoords').onclick=function(){
-        const coords=currentElem.innerText.split(',').map(c=>parseFloat(c));
+        const coords=document.getElementById('currentCoords').querySelector('span').innerText.split(',').map(c=>parseFloat(c));
         if(coords.some(isNaN)){ notify('Нет текущих координат'); return; }
 
         const name=prompt('Введите название для этой точки:');
@@ -218,24 +231,26 @@ function startTracking(){
         const type=prompt('Куда вставить точку? (exc/unload)','exc');
         if(type!=='exc'&&type!=='unload'){ notify('Неверный выбор'); return; }
 
-        saveZone(name, coords[0], coords[1]);
+        const existing=data.savedZones.find(z=>z.name===name);
+        if(existing){existing.lat=coords[0]; existing.lon=coords[1]; notify(`Точка "${name}" обновлена`);}
+        else {data.savedZones.push({name,lat:coords[0],lon:coords[1]}); notify(`Точка "${name}" добавлена`);}
+
         if(type==='exc') data.excZone={name,lat:coords[0],lon:coords[1]};
         else data.unloadZone={name,lat:coords[0],lon:coords[1]};
-        updateUI(); saveData(); notify(`Точка "${name}" добавлена и установлена`);
+        updateUI(); renderPointList(); saveData();
     };
 }
 
-// ---------- кнопки ----------
 function downloadData(){const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='pgs_history.json'; a.click(); URL.revokeObjectURL(url);}
 function resetDay(){if(confirm('Сбросить счётчик рейсов и километраж?')){data.trips=0;data.kmTotal=0;data.tripData=[];saveData();updateUI();}}
 
-// ---------- запуск ----------
 loadData();
 startTracking();
 </script>
 
 </body>
 </html>
+
 
 
 

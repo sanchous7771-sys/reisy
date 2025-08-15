@@ -148,6 +148,18 @@ function applySavedZone(type) {
     if (!z) return;
     if (type === 'unload') { data.unloadZone = {lat: z.lat, lon: z.lon, name: z.name}; notify('Зона выгрузки установлена'); }
     else { data.excZone = {lat: z.lat, lon: z.lon, name: z.name}; notify('Экскаватор установлен'); }
+
+    // Если поставили экскаватор и уже на месте — стартуем первый рейс
+    if(type==='exc'){
+        const distExc = getDistance(currentLat, currentLon, z.lat, z.lon);
+        if(distExc < 0.03 && !data.enRoute){
+            data.enRoute = true;
+            data.lastPoint = {lat: currentLat, lon: currentLon, time: Date.now()};
+            data.tripData.push({loadTime: Date.now(), unloadTime: null, km: 0});
+            notify('Первый рейс стартовал автоматически');
+        }
+    }
+
     saveData();
     updateUI();
 }
@@ -161,70 +173,106 @@ function getDistance(lat1,lon1,lat2,lon2){
 }
 const THRESH=0.03;
 
-function startTracking(){
-    navigator.geolocation.watchPosition(pos=>{
-        currentLat = pos.coords.latitude;
-        currentLon = pos.coords.longitude;
-        document.getElementById('coords').innerText=`${currentLat.toFixed(6)}, ${currentLon.toFixed(6)}`;
-        if(!data.unloadZone||!data.excZone){document.getElementById('status').innerText='Ожидание установки зон...'; return;}
-
-        const distExc=getDistance(currentLat,currentLon,data.excZone.lat,data.excZone.lon);
-        const distUnload=getDistance(currentLat,currentLon,data.unloadZone.lat,data.unloadZone.lon);
-        const statusElem=document.getElementById('status');
-
-        if(distExc<THRESH){
-            statusElem.innerText='У экскаватора'; statusElem.style.color='green';
-            if(!data.enRoute){data.enRoute=true; data.lastPoint={lat:currentLat,lon:currentLon,time:Date.now()}; data.tripData.push({loadTime:Date.now(),unloadTime:null,km:0}); saveData();}
-        }
-        else if(distUnload<THRESH){
-            statusElem.innerText='Выгружаем'; statusElem.style.color='red';
-            if(data.enRoute){
-                const t=data.tripData[data.tripData.length-1];
-                t.unloadTime=Date.now();
-                t.km+=getDistance(currentLat,currentLon,data.lastPoint.lat,data.lastPoint.lon);
-                data.kmTotal+=t.km;
-                data.trips++; data.enRoute=false; saveData(); updateUI();
-            }
-        }
-        else if(data.enRoute){statusElem.innerText='В пути на выгрузку'; statusElem.style.color='orange';}
-        else{statusElem.innerText='Едем на загрузку'; statusElem.style.color='gray';}
-
-    },err=>console.log(err),{enableHighAccuracy:true, maximumAge:1000});
-}
-
-function resetDay(){
-    if(confirm('Вы точно хотите сбросить счетчик рейсов и километраж за день?')){
-        data.trips=0; data.kmTotal=0;
-        saveData();
-        updateUI();
-        notify('Дневной счётчик и километраж сброшены!');
-    }
-}
-
-function downloadData(){
-    const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='trip_history.json'; a.click();
-    URL.revokeObjectURL(url);
-}
-
-// Новый функционал: клик по текущим координатам
+// Клик по текущим координатам
 document.getElementById('coords').addEventListener('click', () => {
     if (!currentLat || !currentLon) {
         notify('Координаты ещё не получены');
         return;
     }
-    if (confirm('Установить эти координаты как точку экскаватора?')) {
+
+    const setExc = confirm('Установить эти координаты как точку экскаватора?');
+    if(setExc){
         data.excZone = {lat: currentLat, lon: currentLon, name: 'Экскаватор'};
         notify('Экскаватор установлен');
-    } else if (confirm('Установить эти координаты как точку выгрузки?')) {
-        data.unloadZone = {lat: currentLat, lon: currentLon, name: 'Выгрузка'};
-        notify('Зона выгрузки установлена');
+
+        // Если на месте экскаватора — старт рейса
+        if(!data.enRoute){
+            data.enRoute = true;
+            data.lastPoint = {lat: currentLat, lon: currentLon, time: Date.now()};
+            data.tripData.push({loadTime: Date.now(), unloadTime: null, km: 0});
+            notify('Первый рейс стартовал автоматически');
+        }
+    } 
+    else {
+        const setUnload = confirm('Установить эти координаты как точку выгрузки?');
+        if(setUnload){
+            data.unloadZone = {lat: currentLat, lon: currentLon, name: 'Выгрузка'};
+            notify('Зона выгрузки установлена');
+        }
     }
+
     saveData();
     updateUI();
 });
 
+function startTracking(){
+    navigator.geolocation.watchPosition(pos=>{
+        currentLat = pos.coords.latitude;
+        currentLon = pos.coords.longitude;
+        document.getElementById('coords').innerText=`${currentLat.toFixed(6)}, ${currentLon.toFixed(6)}`;
+
+        if(!data.unloadZone || !data.excZone){
+            document.getElementById('status').innerText='Ожидание установки зон...';
+            return;
+        }
+
+        const distExc = getDistance(currentLat, currentLon, data.excZone.lat, data.excZone.lon);
+        const distUnload = getDistance(currentLat, currentLon, data.unloadZone.lat, data.unloadZone.lon);
+        const statusElem = document.getElementById('status');
+
+        if(distExc < THRESH){
+            statusElem.innerText = 'У экскаватора';
+            statusElem.style.color = 'green';
+            if(!data.enRoute){
+                data.enRoute = true;
+                data.lastPoint = {lat: currentLat, lon: currentLon, time: Date.now()};
+                data.tripData.push({loadTime: Date.now(), unloadTime: null, km: 0});
+                saveData();
+            }
+        }
+        else if(distUnload < THRESH){
+            statusElem.innerText = 'Выгружаем';
+            statusElem.style.color = 'red';
+            if(data.enRoute){
+                const t = data.tripData[data.tripData.length-1];
+                t.unloadTime = Date.now();
+                t.km += getDistance(currentLat, currentLon, data.lastPoint.lat, data.lastPoint.lon);
+                data.kmTotal += t.km;
+                data.trips++;
+                data.enRoute = false;
+                saveData();
+                updateUI();
+            }
+        }
+        else if(data.enRoute){
+            statusElem.innerText = 'В пути на выгрузку';
+            statusElem.style.color = 'orange';
+        }
+        else{
+            statusElem.innerText = 'Едем на загрузку';
+            statusElem.style.color = 'gray';
+        }
+
+    }, err => console.log(err), {enableHighAccuracy:true, maximumAge:1000});
+}
+
+function downloadData(){
+    const a = document.createElement('a');
+    const file = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    a.href = URL.createObjectURL(file);
+    a.download = 'pgs_trip_data.json';
+    a.click();
+}
+
+function resetDay(){
+    if(confirm('Сбросить дневной счётчик и километраж?')){
+        data.trips = 0; data.kmTotal = 0; data.tripData = [];
+        saveData(); updateUI();
+        notify('Данные сброшены');
+    }
+}
+
+// Инициализация
 loadData();
 updateSavedZonesSelect();
 startTracking();
@@ -232,6 +280,7 @@ startTracking();
 
 </body>
 </html>
+
 
 
 

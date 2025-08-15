@@ -31,7 +31,7 @@
 <div class="panel">
     <div>Зона выгрузки: <span id="unloadZone">не задано</span></div>
     <div>Экскаватор: <span id="excZone">не задано</span></div>
-    <div>Текущие координаты: <span id="coords">нет данных</span></div>
+    <div>Текущие координаты: <span id="coords" style="cursor:pointer; text-decoration:underline;">нет данных</span></div>
     <div>Статус: <span id="status">Ожидание...</span></div>
     <div>Счётчик рейсов: <span id="counter">0</span></div>
     <div>Общий километраж: <span id="kmTotal">0</span> км</div>
@@ -70,7 +70,6 @@
 <button class="btn-red" onclick="resetDay()">🔄 Сбросить дневной счётчик и километраж</button>
 
 <script>
-// ---------- данные ----------
 let data = {
     unloadZone: null,
     excZone: null,
@@ -81,22 +80,19 @@ let data = {
     enRoute: false
 };
 
-// ---------- сохранённые точки ----------
 let savedZones = [
     {name: "угол возле подъема", lat: 56.081522, lon: 93.201198}
 ];
 
-// ---------- локальное хранилище ----------
+let currentLat = null, currentLon = null;
+
 function saveData(){localStorage.setItem('pgsData',JSON.stringify(data));}
 function loadData(){const s=localStorage.getItem('pgsData');if(s){data=JSON.parse(s);updateUI();}}
 
-// ---------- уведомления ----------
 function notify(msg){const n=document.getElementById('notify');n.innerText=msg;n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
 
-// ---------- формы ----------
 function toggleForm(){const f=document.getElementById('zoneForm');f.style.display=f.style.display==='none'?'block':'none';}
 
-// ---------- обновление UI ----------
 function updateUI(){
     document.getElementById('counter').innerText=data.trips;
     document.getElementById('kmTotal').innerText=data.kmTotal.toFixed(2);
@@ -125,7 +121,6 @@ function renderTripTable(){
     });
 }
 
-// ---------- работа с точками ----------
 function updateSavedZonesSelect() {
     const sel = document.getElementById('savedZonesSelect');
     sel.innerHTML = '';
@@ -157,7 +152,6 @@ function applySavedZone(type) {
     updateUI();
 }
 
-// ---------- расстояние ----------
 function getDistance(lat1,lon1,lat2,lon2){
     const R=6371e3; const φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180;
     const Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
@@ -165,29 +159,29 @@ function getDistance(lat1,lon1,lat2,lon2){
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     return (R*c)/1000;
 }
-const THRESH=0.03; // 30 метров
+const THRESH=0.03;
 
-// ---------- трекинг ----------
 function startTracking(){
     navigator.geolocation.watchPosition(pos=>{
-        const lat=pos.coords.latitude, lon=pos.coords.longitude;
-        document.getElementById('coords').innerText=`${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        currentLat = pos.coords.latitude;
+        currentLon = pos.coords.longitude;
+        document.getElementById('coords').innerText=`${currentLat.toFixed(6)}, ${currentLon.toFixed(6)}`;
         if(!data.unloadZone||!data.excZone){document.getElementById('status').innerText='Ожидание установки зон...'; return;}
 
-        const distExc=getDistance(lat,lon,data.excZone.lat,data.excZone.lon);
-        const distUnload=getDistance(lat,lon,data.unloadZone.lat,data.unloadZone.lon);
+        const distExc=getDistance(currentLat,currentLon,data.excZone.lat,data.excZone.lon);
+        const distUnload=getDistance(currentLat,currentLon,data.unloadZone.lat,data.unloadZone.lon);
         const statusElem=document.getElementById('status');
 
         if(distExc<THRESH){
             statusElem.innerText='У экскаватора'; statusElem.style.color='green';
-            if(!data.enRoute){data.enRoute=true; data.lastPoint={lat,lon,time:Date.now()}; data.tripData.push({loadTime:Date.now(),unloadTime:null,km:0}); saveData();}
+            if(!data.enRoute){data.enRoute=true; data.lastPoint={lat:currentLat,lon:currentLon,time:Date.now()}; data.tripData.push({loadTime:Date.now(),unloadTime:null,km:0}); saveData();}
         }
         else if(distUnload<THRESH){
             statusElem.innerText='Выгружаем'; statusElem.style.color='red';
             if(data.enRoute){
                 const t=data.tripData[data.tripData.length-1];
                 t.unloadTime=Date.now();
-                t.km+=getDistance(lat,lon,data.lastPoint.lat,data.lastPoint.lon);
+                t.km+=getDistance(currentLat,currentLon,data.lastPoint.lat,data.lastPoint.lon);
                 data.kmTotal+=t.km;
                 data.trips++; data.enRoute=false; saveData(); updateUI();
             }
@@ -198,7 +192,6 @@ function startTracking(){
     },err=>console.log(err),{enableHighAccuracy:true, maximumAge:1000});
 }
 
-// ---------- сброс ----------
 function resetDay(){
     if(confirm('Вы точно хотите сбросить счетчик рейсов и километраж за день?')){
         data.trips=0; data.kmTotal=0;
@@ -208,7 +201,6 @@ function resetDay(){
     }
 }
 
-// ---------- выгрузка истории ----------
 function downloadData(){
     const blob=new Blob([JSON.stringify(data.tripData,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -216,7 +208,23 @@ function downloadData(){
     URL.revokeObjectURL(url);
 }
 
-// ---------- инициализация ----------
+// Новый функционал: клик по текущим координатам
+document.getElementById('coords').addEventListener('click', () => {
+    if (!currentLat || !currentLon) {
+        notify('Координаты ещё не получены');
+        return;
+    }
+    if (confirm('Установить эти координаты как точку экскаватора?')) {
+        data.excZone = {lat: currentLat, lon: currentLon, name: 'Экскаватор'};
+        notify('Экскаватор установлен');
+    } else if (confirm('Установить эти координаты как точку выгрузки?')) {
+        data.unloadZone = {lat: currentLat, lon: currentLon, name: 'Выгрузка'};
+        notify('Зона выгрузки установлена');
+    }
+    saveData();
+    updateUI();
+});
+
 loadData();
 updateSavedZonesSelect();
 startTracking();
@@ -224,6 +232,7 @@ startTracking();
 
 </body>
 </html>
+
 
 
 
